@@ -23,26 +23,36 @@ pytestmark = pytest.mark.asyncio
 
 
 class TestCleanOverviewText:
-    def test_br_variants_to_chinese_comma(self):
-        assert clean_overview_text("中文名: 葵つばさ<br>罗马音: Aihara") == "中文名: 葵つばさ，罗马音: Aihara"
+    def test_br_variants_preserved(self):
+        """议题 #171: <br> 属合法结构, 客户端渲染分行, 原样保留不压成逗号。"""
+        assert clean_overview_text("中文名: 葵つばさ<br>罗马音: Aihara") == "中文名: 葵つばさ<br>罗马音: Aihara"
         for br in ("<br/>", "<br />", "<BR>", "<Br/>"):
-            assert clean_overview_text(f"a{br}b") == "a，b", br
+            assert clean_overview_text(f"a{br}b") == f"a{br}b", br
 
-    def test_section_headers_removed_but_content_kept(self):
+    def test_section_headers_preserved(self):
+        """===== 段落标题是合法分段结构, 原样保留（#171 实证 Jellyfin 靠其分行渲染）。"""
         text = "简介文本<br>===== 个人资料 =====<br>中文名: X<br>===== 外部链接 =====<br>TheMovieDb: https://x"
-        assert clean_overview_text(text) == "简介文本，中文名: X，TheMovieDb: https://x"
+        assert clean_overview_text(text) == text
 
     def test_screenshot_external_links_shape(self):
         """议题 #149 截图1 实貌: 整段以外部链接段落标题开头, 链接内容保留。"""
         text = "<br>===== 外部链接 =====<br>TheMovieDb: https://www.themoviedb.org/person/42257 <br>"
-        assert clean_overview_text(text) == "TheMovieDb: https://www.themoviedb.org/person/42257"
+        assert clean_overview_text(text) == text
 
     def test_placeholder_cleared(self):
         assert clean_overview_text("无维基百科信息, 从 minnano-av 数据库补全女优信息") == ""
         assert clean_overview_text("无维基百科信息，从 minnano-av 数据库补全女优信息") == ""
 
-    def test_newlines_also_become_commas(self):
-        assert clean_overview_text("a\nb\r\nc") == "a，b，c"
+    def test_newlines_preserved(self):
+        """议题 #171: 换行符保留, 不压成逗号（客户端渲染分行列表）。"""
+        assert clean_overview_text("a\nb\r\nc") == "a\nb\r\nc"
+
+    def test_placeholder_mixed_with_clean_content(self):
+        """占位文案夹在合法内容之间: 删占位, 保留剩余结构与换行。"""
+        assert (
+            clean_overview_text("正常段\n无维基百科信息, 从 minnano-av 数据库补全女优信息\n外部段")
+            == "正常段\n\n外部段"
+        )
 
     def test_normal_text_untouched(self):
         """正常英文简介(含 ASCII 逗号)必须原样保留, 不被折叠成中文逗号。"""
@@ -60,9 +70,9 @@ class TestCleanOverviewText:
 
 
 def test_dump_cleans_overview():
-    """dump() 出口统一清洗: wiki 源拼接的段落标题/<br> 不再写入服务器。"""
+    """dump() 出口统一清洗: 占位文案清除, 合法结构(<br>/换行/段标题)原样保留(#171)。"""
     info = EMbyActressInfo(name="x", server_id="s", id="i", overview="a<br>===== 外部链接 =====<br>b")
-    assert info.dump()["Overview"] == "a，b"
+    assert info.dump()["Overview"] == "a<br>===== 外部链接 =====<br>b"
 
 
 class _JsonResp:
@@ -108,7 +118,7 @@ async def test_update_person_info_cleans_legacy_overview(monkeypatch: pytest.Mon
         existing_overview="a<br>===== 个人资料 =====<br>b",
     )
     payload = await _capture_update_payload(monkeypatch, actor)
-    assert payload["Overview"] == "a，b"
+    assert payload["Overview"] == "a<br>===== 个人资料 =====<br>b"
 
 
 async def test_update_person_info_placeholder_becomes_empty_and_omitted(monkeypatch: pytest.MonkeyPatch):
@@ -174,7 +184,10 @@ def test_scan_actor_data_noise():
     emby_zero = ActorInfo(
         name="零值", actor_id="2", server_id="s", existing_premiere_date="0001-01-01T00:00:00.0000000Z"
     )
-    dirty_ov = ActorInfo(name="脏简介", actor_id="3", server_id="s", existing_overview="a<br>b")
+    # 议题 #171: <br>/换行属合法结构, 不算脏(清洗不再压平), 不进噪声名单
+    dirty_ov = ActorInfo(
+        name="占位", actor_id="3", server_id="s", existing_overview="无维基百科信息, 从 minnano-av 数据库补全女优信息"
+    )
     bad_birth = ActorInfo(
         name="坏生日", actor_id="4", server_id="s", existing_premiere_date="0000-00-00T00:00:00.0000000Z"
     )
@@ -182,7 +195,7 @@ def test_scan_actor_data_noise():
     items = scan_actor_data_noise([clean, emby_zero, dirty_ov, bad_birth])
     by_id = {a.actor_id: (ov, fix) for a, ov, fix in items}
     assert set(by_id) == {"3", "4"}
-    assert by_id["3"] == ("a，b", False)
+    assert by_id["3"] == ("", False)
     assert by_id["4"] == ("", True)
 
 

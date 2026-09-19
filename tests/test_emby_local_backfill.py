@@ -84,8 +84,8 @@ async def test_local_hit_backfills_birth_date_and_bio(monkeypatch):
     payload = state["post"][0]
     assert payload["PremiereDate"] == "1993-06-05T00:00:00.0000000Z"
     assert payload["ProductionYear"] == 1993
-    # 议题 #149: dump() 出口统一清洗, 本地 bio 的 \n→<br/> 产物最终写为中文逗号
-    assert "身高158cm，三围B86" in payload["Overview"]
+    # 议题 #149/#171: dump() 出口清洗占位文案, 但 \n→<br/> 等合法结构原样保留(#171)
+    assert "身高158cm<br/>三围B86" in payload["Overview"]
     assert state["wiki"] == 0 and state["minnano"] == 0 and state["db"] == 0
     assert "本地库命中" in msg
 
