@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import concurrent.futures
 import threading
 from pathlib import Path
 
@@ -43,7 +44,7 @@ from ..utils import executor
 from .emby_actor_manager import (
     ActorInfo,
     build_local_avatar_index,
-    clean_actor_data_batch,
+    clean_actor_data_batch_async,
     fetch_actor_info_from_source,
     fetch_all_actors,
     from_gfriends,
@@ -53,7 +54,7 @@ from .emby_actor_manager import (
     get_gfriends_index,
     get_media_folders,
     search_actor_info,
-    sync_batch,
+    sync_batch_async,
 )
 
 
@@ -171,7 +172,57 @@ class LibrarySelectDialog(QDialog):
         return selected
 
 
-class FetchActorsThread(QThread):
+class _WorkerCancelled(Exception):
+    """后台协程被关窗/停止取消，不向用户弹错误。"""
+
+
+# 议题 #175: wait 超时后把仍在跑的 QThread 从窗口父级卸下，并保住 Python 引用，
+# 避免 WA_DeleteOnClose 拆掉 C++ 线程对象导致整个进程 abort。
+_ORPHAN_WORKER_THREADS: set[QThread] = set()
+
+
+def _detach_running_thread(thread: QThread) -> None:
+    thread.setParent(None)
+    _ORPHAN_WORKER_THREADS.add(thread)
+
+    def _drop(_checked: bool = False, *, _t=thread) -> None:
+        _ORPHAN_WORKER_THREADS.discard(_t)
+        _t.deleteLater()
+
+    thread.finished.connect(_drop)
+
+
+class _CancellableWorkerThread(QThread):
+    """议题 #175: 关窗时必须能打断 executor 阻塞，否则 QThread 随父窗口销毁会 abort 主进程。"""
+
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self._future = None
+        self._lock = threading.Lock()
+
+    def cancel(self):
+        self.abort()
+
+    def abort(self):
+        with self._lock:
+            future = self._future
+        if future is not None and not future.done():
+            future.cancel()
+
+    def _run_coro(self, coro):
+        future = executor.submit(coro)
+        with self._lock:
+            self._future = future
+        try:
+            return future.result()
+        except (concurrent.futures.CancelledError, asyncio.CancelledError) as e:
+            raise _WorkerCancelled from e
+        finally:
+            with self._lock:
+                self._future = None
+
+
+class FetchActorsThread(_CancellableWorkerThread):
     progress = Signal(int, int, str)
     fetch_done = Signal(list, int)
     error = Signal(str)
@@ -182,7 +233,7 @@ class FetchActorsThread(QThread):
 
     def run(self):
         try:
-            actors, raw_count = executor.run(
+            actors, raw_count = self._run_coro(
                 fetch_all_actors(
                     filter_actor_only=manager.config.actor_filter_only,
                     deduplicate=manager.config.actor_deduplicate,
@@ -191,11 +242,13 @@ class FetchActorsThread(QThread):
                 )
             )
             self.fetch_done.emit(actors, raw_count)
+        except _WorkerCancelled:
+            return
         except Exception as e:
             self.error.emit(str(e))
 
 
-class PreparePreviewThread(QThread):
+class PreparePreviewThread(_CancellableWorkerThread):
     progress = Signal(int, int, str)
     preview_done = Signal(list)
     error = Signal(str)
@@ -252,6 +305,7 @@ class PreparePreviewThread(QThread):
         self._cancel = False
 
     def cancel(self):
+        # 「停止获取」只设标志，等当前演员收尾后预览结果仍回填；关窗走 abort() 打断阻塞。
         self._cancel = True
 
     def run(self):
@@ -274,11 +328,12 @@ class PreparePreviewThread(QThread):
                 "force_overview",
             )
             force = "force" in self.mode
-            cancelled = False
-            cancelled = executor.run(self._process_all(targets, need_image, need_info, force, total))
+            cancelled = self._run_coro(self._process_all(targets, need_image, need_info, force, total))
             if not cancelled:
                 self.progress.emit(total, total, "预览数据准备完成")
             self.preview_done.emit(self.actors)
+        except _WorkerCancelled:
+            return
         except Exception:
             import traceback
 
@@ -385,7 +440,7 @@ class PreparePreviewThread(QThread):
             actor.need_update_info = bool(actor.new_overview)
 
 
-class SyncThread(QThread):
+class SyncThread(_CancellableWorkerThread):
     progress = Signal(int, int, str)
     actor_done = Signal(str, str, bool, str)  # (actor_id, name, success, msg)
     sync_done = Signal(int, int)
@@ -397,17 +452,21 @@ class SyncThread(QThread):
 
     def run(self):
         try:
-            success, fail = sync_batch(
-                self.actors,
-                progress_callback=lambda c, t, m: self.progress.emit(c, t, m),
-                actor_callback=lambda actor, ok, msg: self.actor_done.emit(actor.actor_id, actor.name, ok, msg),
+            success, fail = self._run_coro(
+                sync_batch_async(
+                    self.actors,
+                    progress_callback=lambda c, t, m: self.progress.emit(c, t, m),
+                    actor_callback=lambda actor, ok, msg: self.actor_done.emit(actor.actor_id, actor.name, ok, msg),
+                )
             )
             self.sync_done.emit(success, fail)
+        except _WorkerCancelled:
+            return
         except Exception as e:
             self.error.emit(str(e))
 
 
-class CleanDataThread(QThread):
+class CleanDataThread(_CancellableWorkerThread):
     """议题 #149: 存量数据清洗(简介噪声/非法生日), 不经取数流程。"""
 
     progress = Signal(int, int, str)
@@ -422,12 +481,16 @@ class CleanDataThread(QThread):
 
     def run(self):
         try:
-            success, fail = clean_actor_data_batch(
-                self.items,
-                progress_callback=lambda c, t, m: self.progress.emit(c, t, m),
-                actor_callback=lambda actor, ok, msg: self.actor_done.emit(actor.actor_id, ok, msg),
+            success, fail = self._run_coro(
+                clean_actor_data_batch_async(
+                    self.items,
+                    progress_callback=lambda c, t, m: self.progress.emit(c, t, m),
+                    actor_callback=lambda actor, ok, msg: self.actor_done.emit(actor.actor_id, ok, msg),
+                )
             )
             self.clean_done.emit(success, fail)
+        except _WorkerCancelled:
+            return
         except Exception as e:
             self.error.emit(str(e))
 
@@ -481,6 +544,7 @@ class EmbyActorManagerDialog(QDialog):
         self._clean_items: dict[str, tuple[str, bool]] = {}
         self._clean_failed: list[tuple[str, str]] = []  # 议题 #162: (actor_id, 失败消息)
         self._fetch_thread = None
+        self._refresh_thread = None
         self._failed_names: set[str] = set()
         self._log_file: Path | None = None
         self._init_ui()
@@ -1276,15 +1340,49 @@ class EmbyActorManagerDialog(QDialog):
         QMessageBox.critical(self, "错误", msg)
 
     def closeEvent(self, event):
-        # 线程运行中关闭窗口会触发 "QThread: Destroyed while thread is still running" 崩溃，
-        # 关闭前先取消并等待各后台线程结束。
-        for attr in ("_fetch_thread", "_preview_thread", "_sync_thread"):
-            thread = getattr(self, attr, None)
-            if thread is not None and thread.isRunning():
-                if hasattr(thread, "cancel"):
-                    thread.cancel()
-                thread.wait(5000)
+        # 议题 #175: 获取数据中关窗会 "QThread: Destroyed while thread is still running"
+        # 把整个进程 abort（Windows 上看起来像主程序一起退出，日志为空）。
+        # 关闭前取消全部工作线程并等待；超时则卸父级，避免随 WA_DeleteOnClose 一起销毁。
+        self._shutdown_worker_threads()
         super().closeEvent(event)
+
+    def _shutdown_worker_threads(self, timeout_ms: int = 5000) -> None:
+        attrs = ("_fetch_thread", "_preview_thread", "_sync_thread", "_clean_thread", "_refresh_thread")
+        threads = []
+        for attr in attrs:
+            thread = getattr(self, attr, None)
+            if thread is None:
+                continue
+            for sig_name in (
+                "progress",
+                "error",
+                "fetch_done",
+                "preview_done",
+                "sync_done",
+                "clean_done",
+                "actor_done",
+            ):
+                sig = getattr(thread, sig_name, None)
+                if sig is None:
+                    continue
+                try:
+                    sig.disconnect()
+                except (TypeError, RuntimeError):
+                    pass
+            if hasattr(thread, "abort"):
+                thread.abort()
+            elif hasattr(thread, "cancel"):
+                thread.cancel()
+            threads.append(thread)
+        remaining = timeout_ms
+        for thread in threads:
+            if not thread.isRunning():
+                continue
+            waited = thread.wait(max(remaining, 0))
+            if waited or not thread.isRunning():
+                continue
+            _detach_running_thread(thread)
+            remaining = 0
 
     def _on_filter_changed(self):
         self._populate_table(self._actors)
@@ -1608,7 +1706,7 @@ class EmbyActorSettingsDialog(QDialog):
         self.accept()
 
 
-class ActorSourceTestThread(QThread):
+class ActorSourceTestThread(_CancellableWorkerThread):
     """数据源测试线程：在后台执行网络请求，通过信号回传结果。"""
 
     result = Signal(list, object, object)  # logs, avatar_path, info_dict
@@ -1626,11 +1724,13 @@ class ActorSourceTestThread(QThread):
             # 议题 #87：此前自建一次性事件循环再关闭，数据源测试复用共享 curl_cffi
             # 客户端时其 cffi 定时器被注册到该一次性 loop 上；loop 关闭后定时器仍触发，
             # 回调里抛 "Event loop is closed"，Windows 上弹 Python-CFFI error。
-            # 改走 executor.run（提交到永不随线程关闭的后台循环），根除该弹窗。
-            logs, avatar_path, info = executor.run(
+            # 改走 executor.submit + result（提交到永不随线程关闭的后台循环），根除该弹窗。
+            logs, avatar_path, info = self._run_coro(
                 _actor_source_test_execute(self._name, self._need_image, self._need_info)
             )
             self.result.emit(logs, avatar_path, info)
+        except _WorkerCancelled:
+            return
         except Exception as e:
             self.error.emit(str(e))
 
@@ -1761,6 +1861,23 @@ class ActorSourceTestDialog(QDialog):
         self.btn_both.clicked.connect(lambda: self._run(True, True))
         self.btn_image.clicked.connect(lambda: self._run(True, False))
         self.btn_info.clicked.connect(lambda: self._run(False, True))
+        self._thread = None
+
+    def closeEvent(self, event):
+        thread = getattr(self, "_thread", None)
+        if thread is not None:
+            try:
+                thread.result.disconnect()
+            except (TypeError, RuntimeError):
+                pass
+            try:
+                thread.error.disconnect()
+            except (TypeError, RuntimeError):
+                pass
+            thread.cancel()
+            if thread.isRunning() and not thread.wait(5000):
+                _detach_running_thread(thread)
+        super().closeEvent(event)
 
     def _run(self, need_image: bool, need_info: bool):
         name = self.name_edit.text().strip()

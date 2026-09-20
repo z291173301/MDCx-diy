@@ -584,37 +584,41 @@ async def clean_actor_data(actor: ActorInfo, new_overview: str, fix_birth: bool)
     return False, f"❌ {actor.name} 数据清洗失败: {err or '服务器返回空响应'}"
 
 
-def clean_actor_data_batch(
+async def clean_actor_data_batch_async(
     items: list[tuple[ActorInfo, str, bool]],
     progress_callback: Callable | None = None,
     actor_callback: Callable | None = None,
 ) -> tuple[int, int]:
     """议题 #149: 批量清洗存量数据, 与 sync_batch 同一并发/进度模型。"""
+    if not items:
+        return 0, 0
     total = len(items)
+    sem = asyncio.Semaphore(SYNC_CONCURRENCY)
+    completed = 0
 
-    async def _run_batch() -> tuple[int, int]:
-        if not items:
-            return 0, 0
-        sem = asyncio.Semaphore(SYNC_CONCURRENCY)
-        completed = 0
+    async def _one(item: tuple[ActorInfo, str, bool]) -> bool:
+        nonlocal completed
+        actor, new_overview, fix_birth = item
+        async with sem:
+            ok, _msg = await clean_actor_data(actor, new_overview, fix_birth)
+        completed += 1
+        if progress_callback:
+            progress_callback(completed, total, f"正在清洗: {actor.name} ({completed}/{total})")
+        if actor_callback:
+            actor_callback(actor, ok, _msg)
+        return ok
 
-        async def _one(item: tuple[ActorInfo, str, bool]) -> bool:
-            nonlocal completed
-            actor, new_overview, fix_birth = item
-            async with sem:
-                ok, _msg = await clean_actor_data(actor, new_overview, fix_birth)
-            completed += 1
-            if progress_callback:
-                progress_callback(completed, total, f"正在清洗: {actor.name} ({completed}/{total})")
-            if actor_callback:
-                actor_callback(actor, ok, _msg)
-            return ok
+    results = await asyncio.gather(*(_one(i) for i in items))
+    success = sum(1 for r in results if r)
+    return success, len(results) - success
 
-        results = await asyncio.gather(*(_one(i) for i in items))
-        success = sum(1 for r in results if r)
-        return success, len(results) - success
 
-    return executor.run(_run_batch())
+def clean_actor_data_batch(
+    items: list[tuple[ActorInfo, str, bool]],
+    progress_callback: Callable | None = None,
+    actor_callback: Callable | None = None,
+) -> tuple[int, int]:
+    return executor.run(clean_actor_data_batch_async(items, progress_callback, actor_callback))
 
 
 async def upload_actor_image(actor: ActorInfo, image_path: str | Path) -> tuple[bool, str]:
@@ -1023,30 +1027,32 @@ def sync_actor(actor: ActorInfo, sync_type: str = "both") -> tuple[bool, str]:
     return executor.run(_sync_actor_async(actor, sync_type))
 
 
+async def sync_batch_async(
+    actors: list[ActorInfo], progress_callback: Callable | None = None, actor_callback: Callable | None = None
+) -> tuple[int, int]:
+    if not actors:
+        return 0, 0
+    total = len(actors)
+    sem = asyncio.Semaphore(SYNC_CONCURRENCY)
+    completed = 0
+
+    async def _one(actor: ActorInfo) -> bool:
+        nonlocal completed
+        async with sem:
+            ok, msg = await _sync_actor_async(actor)
+        completed += 1
+        if progress_callback:
+            progress_callback(completed, total, f"正在同步: {actor.name} ({completed}/{total})")
+        if actor_callback:
+            actor_callback(actor, ok, msg)
+        return ok
+
+    results = await asyncio.gather(*(_one(a) for a in actors))
+    success = sum(1 for r in results if r)
+    return success, len(results) - success
+
+
 def sync_batch(
     actors: list[ActorInfo], progress_callback: Callable | None = None, actor_callback: Callable | None = None
 ) -> tuple[int, int]:
-    total = len(actors)
-
-    async def _run_batch() -> tuple[int, int]:
-        if not actors:
-            return 0, 0
-        sem = asyncio.Semaphore(SYNC_CONCURRENCY)
-        completed = 0
-
-        async def _one(actor: ActorInfo) -> bool:
-            nonlocal completed
-            async with sem:
-                ok, msg = await _sync_actor_async(actor)
-            completed += 1
-            if progress_callback:
-                progress_callback(completed, total, f"正在同步: {actor.name} ({completed}/{total})")
-            if actor_callback:
-                actor_callback(actor, ok, msg)
-            return ok
-
-        results = await asyncio.gather(*(_one(a) for a in actors))
-        success = sum(1 for r in results if r)
-        return success, len(results) - success
-
-    return executor.run(_run_batch())
+    return executor.run(sync_batch_async(actors, progress_callback, actor_callback))
