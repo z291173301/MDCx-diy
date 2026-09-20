@@ -11,7 +11,7 @@
   - **本记忆文件不受 150 行长度限制**（用户 2026-09-06 明示覆盖系统规则）；但入选标准不变——只记"以后每次都该怎么做"，不记单次任务细节、不记读代码即可获知的内容。
   - **遇到可记内容时主动记入本文件**（用户 2026-09-06 明确要求），不等提醒；每次任务收尾时自问"本轮有没有值得沉淀的行为模式/流程纪律/环境陷阱"，有则立即写入并合规自检。
   - 改动前说明内容与原因；用户明确要求提交/推送后才执行，绝不擅自操作。直接在当前分支操作。
-  - **检查纪律**：每次代码改动后跑 `uv run quick-check`；提交前跑 `uv run check --skip-hook-install`。仅改 `docs/*.md` 或本文件时只需 `git diff --check`。全绿判定 = 退出码 0 + `grep -E "\.py:[0-9]+: error|Found [0-9]+ error"` 无输出（CI 连挂三次的教训：mypy 输出可被 tail 截断）。**`ruff check` 过 ≠ `ruff format --check` 过——改 .py 必须 `ruff format` 落地**（2026-09-09 四次 CI 挂全是 format 漂移）。`scripts/` 也在 check 范围。
+  - **检查纪律**：每次代码改动后跑 `uv run quick-check`；提交前跑 `uv run check --skip-hook-install`。仅改 `docs/*.md` 或本文件时只需 `git diff --check`。全绿判定 = 退出码 0 + `grep -E "\.py:[0-9]+: error|Found [0-9]+ error"` 无输出（CI 连挂三次的教训：mypy 输出可被 tail 截断）。**`ruff check` 过 ≠ `ruff format --check` 过——改 .py 必须 `ruff format` 落地**（2026-09-09 四次 CI 挂全是 format 漂移）。`scripts/` 也在 check 范围。**pre-push 钩子三注意（2026-09-20 实证）**：①`hooksPath` 是本地 git config，**环境重置后静默失效**——而日常跑的 `check --skip-hook-install` 恰恰跳过自动配置钩子那步，两者叠加导致失效无人察觉；重置后先 `git config core.hooksPath` 验证，为空则 `git config core.hooksPath .githooks` 补配置；②钩子生效时日常流程=「quick-check → commit → push（钩子自动全量）」，**不要再手动多跑一次全量**（省 3 分钟）；③钩子失效期间推送前必须手动全量 check 兜底；④`.pre-commit-config.yaml` 为历史遗留、不依赖。
   - 提交前必看 `git status` 未跟踪文件：运行残留与中间产物不得 `git add -A` 入库，先 `.gitignore` 排除。
   - **提交信息不要手写 Co-authored-by trailer**：`.git/hooks/prepare-commit-msg`（不在 .githooks/）每次 commit 从 git config 无条件追加署名，手写会重复、amend 会累加。正文只给标题行。
   - **"本地全绿≠CI 通过"三维度**：输出截断 / 版本语义差异（模块级带值注解 3.13 立即求值 vs 3.14 PEP 649 延迟，单例声明一律无注解赋值）/ 平台差异。Windows runner：`subprocess.run(text=True)` 一律显式 `encoding="utf-8", errors="replace"`（默认 GBK 遇 UTF-8 字节炸链）。
