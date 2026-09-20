@@ -610,7 +610,6 @@ async def newtdisk_creat_symlink(
                         signal.show_log_text(f" {total} 🍀 Link done!\n {net_file} ")
                         link_num += 1
                     except Exception as e:
-                        print(traceback.format_exc())
                         error_info = ""
                         if "symbolic link privilege not held" in str(e):
                             error_info = "   \n没有创建权限，请尝试管理员权限！或按照教程开启用户权限： https://www.jianshu.com/p/0e307bfe8770"
@@ -625,7 +624,6 @@ async def newtdisk_creat_symlink(
             f"Linked {link_num} , Copied {copy_num} , Skiped {skip_num} , Failed {fail_num} "
         )
     except Exception:
-        print(traceback.format_exc())
         signal.show_log_text(traceback.format_exc())
 
     signal.show_log_text("================================================================================")

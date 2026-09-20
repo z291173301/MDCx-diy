@@ -1613,7 +1613,7 @@ class MyMAinWindow(QMainWindow):
         thread_remain_list = []
         [thread_remain_list.append(t.name) for t in threading.enumerate()]  # 剩余线程名字列表
         thread_remain = ", ".join(thread_remain_list)
-        print(f"✅ 剩余线程 ({len(thread_remain_list)}): {thread_remain}")
+        signal_qt.show_traceback_log(f"剩余线程 ({len(thread_remain_list)}): {thread_remain}")
         self.show_stop_info_thread()
 
     # 进度条
