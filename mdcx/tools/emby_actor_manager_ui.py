@@ -1542,15 +1542,15 @@ class EmbyActorManagerDialog(QDialog):
 
 
 IMAGE_SOURCE_NAMES = {
-    "gfriends": "Gfriends 头像库",
-    "graphis": "graphis 头像/背景",
-    "minnano": "minnano-av 头像",
+    "gfriends": "Gfriends头像库",
+    "graphis": "Graphis头像/背景",
+    "minnano": "Minnano-av头像",
     "local": "本地头像",
 }
 INFO_SOURCE_NAMES = {
     "local": "本地演员库",
-    "wiki": "维基百科",
-    "minnano": "minnano-av 信息",
+    "wiki": "维基百科网站",
+    "minnano": "Minnano-av信息",
     "database": "本地数据库",
 }
 
