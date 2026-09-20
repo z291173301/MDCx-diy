@@ -546,11 +546,23 @@ class EmbyActorManagerDialog(QDialog):
         self._clean_failed: list[tuple[str, str]] = []  # 议题 #162: (actor_id, 失败消息)
         self._fetch_thread = None
         self._refresh_thread = None
+        # 议题 #25: 任务会话代数——取消/重启任务后旧线程的排队回调整体作废
+        self._session_gen = 0
         self._failed_names: set[str] = set()
         self._log_file: Path | None = None
         self._init_ui()
         self._connect_signals()
         self._open_log_file()
+
+    def _begin_session(self, thread) -> None:
+        """任务线程发起时颁发代数；与对话框当前值一致才允许写回 UI/状态。"""
+        self._session_gen += 1
+        thread._session_gen = self._session_gen
+
+    def _is_stale_session(self) -> bool:
+        """回调入口守卫：sender 携带的会话代数已过期则返回 True（调用方直接丢弃）。"""
+        gen = getattr(self.sender(), "_session_gen", None)
+        return gen is not None and gen != self._session_gen
 
     def _load_stylesheet(self) -> str:
         return """
@@ -1042,18 +1054,23 @@ class EmbyActorManagerDialog(QDialog):
         self.log("📜 开始获取演员列表...")
         self._fetch_thread = FetchActorsThread(self)
         self._fetch_thread.library_ids = library_ids
+        self._begin_session(self._fetch_thread)
         self._fetch_thread.progress.connect(self._on_fetch_progress)
         self._fetch_thread.fetch_done.connect(self._on_fetch_finished)
         self._fetch_thread.error.connect(self._on_thread_error)
         self._fetch_thread.start()
 
     def _on_fetch_progress(self, current: int, total: int, msg: str):
+        if self._is_stale_session():
+            return
         if total > 0:
             self.progress_bar.setMaximum(total)
             self.progress_bar.setValue(current)
         self.setWindowTitle(f"Emby/Jellyfin 演员管理器 - {msg}")
 
     def _on_fetch_finished(self, actors: list[ActorInfo], raw_count: int):
+        if self._is_stale_session():
+            return
         self._actors = actors
         self._raw_count = raw_count
         self._set_status("获取完成")
@@ -1078,8 +1095,14 @@ class EmbyActorManagerDialog(QDialog):
     def _on_prepare_preview(self):
         if self._preview_thread and self._preview_thread.isRunning():
             self._preview_thread.cancel()
+            # 议题 #25: 代数+1 作废旧线程全部排队回调；UI 立即恢复可操作，
+            # 不再等旧线程收尾信号（旧版依赖它恢复按钮，cancel→快速重开存在覆盖窗口）
+            self._session_gen += 1
             self.log("⏹️ 用户取消")
             self.btn_preview.setText("根据设定获取数据")
+            self.progress_bar.setVisible(False)
+            self._set_status("已取消")
+            self._set_buttons_enabled(True)
             return
         mode_map = {
             "仅缺失简介": "missing_info",
@@ -1115,12 +1138,15 @@ class EmbyActorManagerDialog(QDialog):
         self._preview_thread.local_avatar_dir = (
             manager.config.actor_photo_folder if hasattr(manager.config, "actor_photo_folder") else ""
         )
+        self._begin_session(self._preview_thread)
         self._preview_thread.progress.connect(self._on_fetch_progress)
         self._preview_thread.preview_done.connect(self._on_preview_finished)
         self._preview_thread.error.connect(self._on_thread_error)
         self._preview_thread.start()
 
     def _on_preview_finished(self, actors: list[ActorInfo]):
+        if self._is_stale_session():
+            return
         self._actors = actors
         self._populate_table(actors)
         self._update_statistics(actors)
@@ -1170,6 +1196,7 @@ class EmbyActorManagerDialog(QDialog):
         self._clean_failed = []
         self._clean_thread = CleanDataThread(self)
         self._clean_thread.items = dirty
+        self._begin_session(self._clean_thread)
         self._clean_thread.progress.connect(self._on_sync_progress)
         self._clean_thread.actor_done.connect(self._on_clean_actor_done)
         self._clean_thread.clean_done.connect(self._on_clean_finished)
@@ -1177,6 +1204,8 @@ class EmbyActorManagerDialog(QDialog):
         self._clean_thread.start()
 
     def _on_clean_actor_done(self, actor_id: str, success: bool, msg: str):
+        if self._is_stale_session():
+            return
         # 清洗成功后立即就地更新内存状态; 失败保留原值, 下次清洗可重试
         # 议题 #162: 失败逐条落日志(名字+服务器原因), 完成时汇总, 消除"只见计数不见原因"盲区
         if not success:
@@ -1194,6 +1223,8 @@ class EmbyActorManagerDialog(QDialog):
             actor.existing_premiere_date = ""
 
     def _on_clean_finished(self, success: int, fail: int):
+        if self._is_stale_session():
+            return
         self.progress_bar.setVisible(False)
         self._set_buttons_enabled(True)
         self._set_status("数据清洗完成")
@@ -1238,6 +1269,7 @@ class EmbyActorManagerDialog(QDialog):
         self._failed_names.clear()
         self._sync_thread = SyncThread(self)
         self._sync_thread.actors = to_sync
+        self._begin_session(self._sync_thread)
         self._sync_thread.progress.connect(self._on_sync_progress)
         self._sync_thread.actor_done.connect(self._on_sync_actor_done)
         self._sync_thread.sync_done.connect(self._on_sync_finished)
@@ -1245,11 +1277,15 @@ class EmbyActorManagerDialog(QDialog):
         self._sync_thread.start()
 
     def _on_sync_progress(self, current: int, total: int, msg: str):
+        if self._is_stale_session():
+            return
         self.progress_bar.setMaximum(total)
         self.progress_bar.setValue(current)
         self.setWindowTitle(f"Emby/Jellyfin 演员管理器 - {msg}")
 
     def _on_sync_actor_done(self, actor_id: str, name: str, success: bool, msg: str):
+        if self._is_stale_session():
+            return
         # 用 actor_id 匹配，避免同名演员（未去重时）按名字错位更新状态
         actor = next((a for a in self._actors if a.actor_id == actor_id), None)
         if success:
@@ -1278,6 +1314,8 @@ class EmbyActorManagerDialog(QDialog):
             a.need_update_backdrop = False
 
     def _on_sync_finished(self, success: int, fail: int):
+        if self._is_stale_session():
+            return
         self.progress_bar.setVisible(False)
         self._set_buttons_enabled(True)
         self.btn_sync.setText("开始全部更新同步")
@@ -1332,6 +1370,8 @@ class EmbyActorManagerDialog(QDialog):
         self._set_buttons_enabled(True)
 
     def _on_thread_error(self, msg: str):
+        if self._is_stale_session():
+            return
         self.progress_bar.setVisible(False)
         # 线程已结束，恢复按钮文本与状态，避免"停止/同步中..."残留
         self.btn_preview.setText("根据设定获取数据")

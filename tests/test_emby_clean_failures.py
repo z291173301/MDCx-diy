@@ -47,6 +47,8 @@ def _fake_dialog(actors):
         _set_status=lambda *_: None,
         _populate_table=lambda *_: None,
         _update_statistics=lambda *_: None,
+        # 议题 #25: 真类新增会话守卫, fake self 无 sender 语义, 恒判"非陈旧"
+        _is_stale_session=lambda: False,
     )
     return ns, logs, EmbyActorManagerDialog
 

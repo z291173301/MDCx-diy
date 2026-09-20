@@ -221,7 +221,7 @@
 - fantia/fc2hub 与现有源重叠度高，暂不列
 - 新增站点注意全链路影响面：Website 枚举 + 注册 + proxy 列表 + migrations 清洗 + UI 站点列表 + 文档五处数字
 
-### 25. 维护任务代数防陈旧写入 ⬜
+### 25. 维护任务代数防陈旧写入 ✅（2026-09-20 实现：演员管理器 _session_gen 代数 + 9 回调守卫 + cancel 即时恢复 UI，6 测试含 AST 哨兵）
 - **价值：低**　**难度：低**（0.5 天）
 - 参考 mdcz `MaintenanceSession` 的 `StaleMaintenanceGenerationError`：会话携带代数号（generation），后台任务写回时校验代数，过期任务结果直接丢弃
 - 与我们「快照比对才清 dirty」（#98-2）同族，补强"用户连续发起两次维护/取消后旧任务回写"场景的防护
