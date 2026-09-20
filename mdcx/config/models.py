@@ -672,6 +672,12 @@ class Config(BaseModel):
     actor_photo_kodi_auto: bool = Field(default=False, title="演员照片Kodi自动")
     # endregion
 
+    # region: Poster Super-Resolution (议题 #26)
+    poster_sr_enabled: bool = Field(default=False, title="海报超分增强(首次使用自动下载ncnn-vulkan工具)")
+    poster_sr_preset: str = Field(default="realesr-photo-4x", title="海报超分预设 realesr-photo-4x/waifu-photo-2x")
+    poster_sr_max_dim: int = Field(default=1200, ge=64, le=8192, title="海报最长边小于此值才超分")
+    # endregion
+
     # region: Watermark Settings
     poster_mark: int = Field(default=1, title="海报水印")
     thumb_mark: int = Field(default=1, title="缩略图水印")

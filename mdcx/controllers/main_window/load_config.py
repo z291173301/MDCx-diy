@@ -593,6 +593,7 @@ def load_config(self: "MyMAinWindow"):
             (self.Ui.checkBox_ignore_size, DownloadableFile.IGNORE_SIZE),
         )
         self.Ui.checkBox_compress_downloaded_images.setChecked(manager.config.compress_downloaded_images)
+        self.Ui.checkBox_super_resolution_poster.setChecked(manager.config.poster_sr_enabled)
         # 保留文件
         set_checkboxes(
             manager.config.keep_files,

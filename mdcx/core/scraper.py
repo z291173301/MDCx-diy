@@ -1,4 +1,5 @@
 import asyncio
+import contextlib
 import time
 import traceback
 from pathlib import Path
@@ -63,6 +64,7 @@ from .file_crawler import FileScraper, classify_existing_scrape_result, classify
 from .image import add_mark
 from .media_resource import MediaResourceContext
 from .nfo import get_nfo_data, write_nfo
+from .super_resolution import maybe_upscale_poster
 from .translate import translate_actor, translate_info, translate_title_outline
 from .utils import (
     add_definition_tag,
@@ -786,6 +788,10 @@ class Scraper:
             if extrafanart_task is not None and not extrafanart_task.done():
                 extrafanart_task.cancel()
             return False
+
+        # 议题 #26: 海报超分增强（开关默认关；失败静默保持原图，不影响刮削结果）
+        with contextlib.suppress(Exception):
+            await maybe_upscale_poster(poster_final_path)
 
         await pic_some_deal(res.number, thumb_final_path, fanart_final_path)
         await add_mark(other, file_info, res.mosaic)

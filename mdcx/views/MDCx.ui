@@ -9771,7 +9771,7 @@
                       <x>0</x>
                       <y>0</y>
                       <width>860</width>
-                      <height>1680</height>
+                      <height>1715</height>
                     </rect>
                   </property>
                   <widget class="QGroupBox" name="groupBox_24">
@@ -10409,7 +10409,7 @@
                     <property name="geometry">
                       <rect>
                         <x>30</x>
-                        <y>1414</y>
+                        <y>1449</y>
                         <width>701</width>
                         <height>211</height>
                       </rect>
@@ -10506,7 +10506,7 @@
                     <property name="geometry">
                       <rect>
                         <x>30</x>
-                        <y>1134</y>
+                        <y>1169</y>
                         <width>701</width>
                         <height>261</height>
                       </rect>
@@ -10644,7 +10644,7 @@
                         <x>30</x>
                         <y>670</y>
                         <width>701</width>
-                        <height>225</height>
+                        <height>260</height>
                       </rect>
                     </property>
                     <property name="minimumSize">
@@ -10825,12 +10825,59 @@
                         </item>
                       </layout>
                     </widget>
+                    <widget class="QWidget" name="horizontalLayoutWidget_sr">
+                      <property name="geometry">
+                        <rect>
+                          <x>60</x>
+                          <y>205</y>
+                          <width>621</width>
+                          <height>31</height>
+                        </rect>
+                      </property>
+                      <layout class="QHBoxLayout" name="horizontalLayout_sr">
+                        <item>
+                          <widget class="QCheckBox" name="checkBox_super_resolution_poster">
+                            <property name="sizePolicy">
+                              <sizepolicy hsizetype="Fixed" vsizetype="Fixed">
+                                <horstretch>0</horstretch>
+                                <verstretch>0</verstretch>
+                              </sizepolicy>
+                            </property>
+                            <property name="toolTip">
+                              <string>首次使用会自动从 GitHub 下载超分工具（约30-60MB，仅一次）；预设默认 Real-ESRGAN 4x，可在配置 json 用 poster_sr_preset 改 waifu-photo-2x；最长边阈值默认 1200px，可用 poster_sr_max_dim 调整</string>
+                            </property>
+                            <property name="text">
+                              <string>海报超分（实验）</string>
+                            </property>
+                          </widget>
+                        </item>
+                        <item>
+                          <widget class="QLabel" name="label_super_resolution_poster">
+                            <property name="sizePolicy">
+                              <sizepolicy hsizetype="Minimum" vsizetype="Fixed">
+                                <horstretch>0</horstretch>
+                                <verstretch>0</verstretch>
+                              </sizepolicy>
+                            </property>
+                            <property name="styleSheet">
+                              <string notr="true">color: rgb(8, 128, 128);</string>
+                            </property>
+                            <property name="text">
+                              <string>落盘封面最长边低于阈值时 AI 超分放大补清，失败静默保持原图</string>
+                            </property>
+                            <property name="wordWrap">
+                              <bool>true</bool>
+                            </property>
+                          </widget>
+                        </item>
+                      </layout>
+                    </widget>
                   </widget>
                   <widget class="QGroupBox" name="groupBox_66">
                     <property name="geometry">
                       <rect>
                         <x>30</x>
-                        <y>914</y>
+                        <y>949</y>
                         <width>701</width>
                         <height>201</height>
                       </rect>

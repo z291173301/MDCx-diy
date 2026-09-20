@@ -230,7 +230,7 @@
 
 ## 2026-09-20 开源生态调研第二批（amane / javdb-cli / OpenAver / sakuramedia / JavBoss / javinizer-go / missav-api / dmm-proxy-api）
 
-### 26. 低清海报超分增强 ⬜（来源 sqzw-x/amane，2026-09-20 已深挖，技术选型已定）
+### 26. 低清海报超分增强 ✅（2026-09-20 完整落地：core/super_resolution.py + scraper 挂接 + 下载高清图组 UI 开关 + 9 测试）
 - **价值：中**　**难度：中**（2-3 天）
 - amane 方案（直接采纳）：**ncnn-vulkan 外部二进制 + 按平台首次使用时下载**（Real-ESRGAN xinntao v0.2.5.0 / waifu2x nihui 20250915 的 GitHub release，darwin/linux/win32 三平台 zip），不随包分发、免 torch/ONNX 大依赖
 - 预设制：`realesr-photo-4x`（realesrgan-x4plus 4x 无降噪）/ `waifu-photo-2x`（upconv_7_photo 2x）

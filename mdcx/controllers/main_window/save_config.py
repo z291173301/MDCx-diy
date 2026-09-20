@@ -421,6 +421,7 @@ def save_config(self: "MyMAinWindow"):
         (self.Ui.checkBox_ignore_size, DownloadableFile.IGNORE_SIZE),
     )
     manager.config.compress_downloaded_images = self.Ui.checkBox_compress_downloaded_images.isChecked()
+    manager.config.poster_sr_enabled = self.Ui.checkBox_super_resolution_poster.isChecked()
 
     manager.config.keep_files = get_checkboxes(
         (self.Ui.checkBox_old_poster, KeepableFile.POSTER),
