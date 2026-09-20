@@ -70,8 +70,14 @@ uv run python main.py
 
 推送前自检：
 ```bash
-uv run check --skip-hook-install
+git config core.hooksPath .githooks   # 一次性：启用 pre-push 自动全量自检
+uv run check --skip-hook-install      # 或手动跑
 ```
+
+## 贡献与提报
+
+- 提 Bug / 功能请求请使用 [Issue 模板](../../issues/new/choose)，一个议题说一件事，附现象、影响与复现步骤。
+- 使用 AI 工具辅助撰写 Issue 或 PR 的，请阅读并按 [.github/AI_POLICY.md](.github/AI_POLICY.md) 披露使用程度；是否采纳以代码与复现证据为准。
 
 ## 上游项目
 

@@ -7,6 +7,7 @@ from dataclasses import dataclass
 from io import BytesIO
 from pathlib import Path
 from typing import Any
+from urllib.parse import urlsplit
 
 import aiofiles
 import aiofiles.os
@@ -27,6 +28,7 @@ from ..base.web import (
 )
 from ..config.manager import manager
 from ..models.log_buffer import LogBuffer
+from . import image_host_cooldown
 
 
 @dataclass(slots=True)
@@ -119,6 +121,11 @@ class MediaResourceContext:
     async def _fetch_image(self, normalized_url: str) -> FetchedImage | None:
         # 完整下载不能使用 DMM 探测参数，否则会把 120x90 探测图写入封面缓存。
         request_url, added_probe = normalized_url, False
+        # 议题 #21: 图床冷却期内直接跳过该候选（调用方自然走下一候选），不再重复撞死图床
+        skip_remaining = image_host_cooldown.remaining_seconds(request_url)
+        if skip_remaining > 0:
+            LogBuffer.web().write(f"\n 🕒 图床冷却中，跳过: {urlsplit(request_url).hostname} ({skip_remaining:.0f}s)")
+            return None
         headers = build_jdbstatic_headers(request_url) if is_jdbstatic_image_url(request_url) else None
         log_jdbstatic_request_headers(request_url, headers)
         async with manager.acquire_computed() as computed:
@@ -127,6 +134,8 @@ class MediaResourceContext:
             if response is None:
                 if error:
                     LogBuffer.web().write(f"\n 🟡 图片读取失败: {error}")
+                    # 议题 #21: 仅服务器侧错误计入图床失败（传输层=本地网络问题不记账）
+                    image_host_cooldown.record_failure(request_url, error)
                 return None
 
             true_url = normalize_media_url(str(response.url), strip_dmm_probe_params=added_probe)
@@ -159,6 +168,7 @@ class MediaResourceContext:
         if true_url != normalized_url:
             self._images[true_url] = image
             self._image_sizes[(true_url, False)] = image.size
+        image_host_cooldown.record_success(request_url)
         return image
 
     async def fetch_bytes(self, url: str) -> bytes | None:

@@ -348,6 +348,14 @@ def _is_dmm_placeholder_size(size: int | None) -> bool:
     return size is not None and 0 < size < _DMM_PLACEHOLDER_MAX_BYTES
 
 
+def _parse_content_range_total(value: str | None) -> int | None:
+    """从 Content-Range 头（如 `bytes 0-1023/512345`）解析文件总大小；`/*` 或畸形返回 None。"""
+    if not value:
+        return None
+    match = re.search(r"/(\d+)\s*$", value)
+    return int(match.group(1)) if match else None
+
+
 async def _validate_dmm_image_url(url: str, length: bool = False, real_url: bool = False):
     normalized = normalize_media_url(url)
     request_url, added_probe = _build_dmm_probe_url(normalized)
@@ -358,7 +366,12 @@ async def _validate_dmm_image_url(url: str, length: bool = False, real_url: bool
         client = computed.async_client
         for retry_attempt in range(max_retries):
             try:
-                response, error = await client.request("GET", request_url, retry_count=1)
+                # 议题 #30: Range 探测只传 1KB 头部判存在与大小（借鉴 dmm-proxy-api 思路，
+                # 仅 GET+Range 是几乎所有静态 CDN 都支持的存在性探测方式，HEAD 部分图床不支持）。
+                # 总大小优先取 Content-Range(206)，其次 Content-Length(200)。
+                response, error = await client.request(
+                    "GET", request_url, retry_count=1, stream=True, headers={"Range": "bytes=0-1023"}
+                )
                 if response is None:
                     last_error = error
                     if retry_attempt < max_retries - 1 and _should_retry_link_error(error):
@@ -368,34 +381,49 @@ async def _validate_dmm_image_url(url: str, length: bool = False, real_url: bool
                     signal.add_log(f"🔴 检测链接失败: {error}")
                     return None
 
-                true_url = normalize_media_url(str(response.url), strip_dmm_probe_params=added_probe)
-                if real_url:
-                    return true_url
+                try:
+                    true_url = normalize_media_url(str(response.url), strip_dmm_probe_params=added_probe)
+                    if real_url:
+                        return true_url
 
-                if "login" in true_url:
-                    signal.add_log(f"🔴 检测链接失败: 需登录 {true_url}")
-                    return None
-
-                if _is_invalid_image_redirect_url(true_url):
-                    signal.add_log(f"🔴 检测链接失败: 图片已被网站删除 {_host_tag(true_url)} {true_url}")
-                    return None
-
-                if content_length := _parse_content_length(response.headers.get("Content-Length")):
-                    if _is_dmm_placeholder_size(content_length):
-                        last_error = f"疑似占位图({content_length}B) {true_url}"
-                        signal.add_log(f"🔴 检测链接失败: {last_error}")
+                    if "login" in true_url:
+                        signal.add_log(f"🔴 检测链接失败: 需登录 {true_url}")
                         return None
-                    signal.add_log(f"✅ 检测链接通过: 返回大小({content_length}) {true_url}")
-                    return content_length if length else true_url
 
-                if response.content and len(response.content) > 0:
-                    downloaded_size = len(response.content)
-                    if _is_dmm_placeholder_size(downloaded_size):
-                        last_error = f"疑似占位图({downloaded_size}B) {true_url}"
-                        signal.add_log(f"🔴 检测链接失败: {last_error}")
+                    if _is_invalid_image_redirect_url(true_url):
+                        signal.add_log(f"🔴 检测链接失败: 图片已被网站删除 {_host_tag(true_url)} {true_url}")
                         return None
-                    signal.add_log(f"✅ 检测链接通过: 预下载成功 {true_url}")
-                    return downloaded_size if length else true_url
+
+                    content_length = _parse_content_range_total(response.headers.get("Content-Range")) or (
+                        _parse_content_length(response.headers.get("Content-Length"))
+                    )
+                    if content_length:
+                        if _is_dmm_placeholder_size(content_length):
+                            last_error = f"疑似占位图({content_length}B) {true_url}"
+                            signal.add_log(f"🔴 检测链接失败: {last_error}")
+                            return None
+                        signal.add_log(f"✅ 检测链接通过: 返回大小({content_length}) {true_url}")
+                        return content_length if length else true_url
+                finally:
+                    await client._close_response(response)
+
+                # 响应头无任何大小（服务器忽略 Range 且不给 Content-Length）：
+                # 回退一次完整下载判定，保持旧语义
+                fallback_resp, _ = await client.request("GET", request_url, retry_count=1)
+                if fallback_resp is not None:
+                    try:
+                        fb_url = normalize_media_url(str(fallback_resp.url), strip_dmm_probe_params=added_probe)
+                        if "login" not in fb_url and not _is_invalid_image_redirect_url(fb_url):
+                            downloaded_size = len(fallback_resp.content or b"")
+                            if downloaded_size > 0:
+                                if _is_dmm_placeholder_size(downloaded_size):
+                                    last_error = f"疑似占位图({downloaded_size}B) {fb_url}"
+                                    signal.add_log(f"🔴 检测链接失败: {last_error}")
+                                    return None
+                                signal.add_log(f"✅ 检测链接通过: 预下载成功 {fb_url}")
+                                return downloaded_size if length else fb_url
+                    finally:
+                        await client._close_response(fallback_resp)
 
                 last_error = f"未返回大小且预下载失败 {true_url}"
                 if retry_attempt < max_retries - 1:
@@ -1218,11 +1246,23 @@ async def download_dmm_extrafanart_with_filepath(url: str, file_path: Path, fold
         LogBuffer.web().write(f"\n 💡 DMM image invalid! {url}")
         return False
 
+    # 议题 #21: 图床冷却期内直接跳过（download_extrafanart_task 的 pics.dmm 回退不受影响）
+    from ..core.image_host_cooldown import record_failure as _record_host_failure
+    from ..core.image_host_cooldown import record_success as _record_host_success
+    from ..core.image_host_cooldown import remaining_seconds as _host_cooldown_remaining
+
+    skip_remaining = _host_cooldown_remaining(normalized_url)
+    if skip_remaining > 0:
+        LogBuffer.web().write(f"\n 🕒 图床冷却中，跳过: {urlsplit(normalized_url).hostname} ({skip_remaining:.0f}s)")
+        return False
+
     try:
         async with manager.acquire_computed() as computed:
             response, error = await computed.async_client.request("GET", normalized_url)
         if response is None:
             LogBuffer.log().write(f"\n 🥺 Download failed! {url} {error}")
+            if error:
+                _record_host_failure(normalized_url, error)
             return False
 
         true_url = normalize_media_url(str(response.url))
@@ -1241,6 +1281,7 @@ async def download_dmm_extrafanart_with_filepath(url: str, file_path: Path, fold
         if not is_webp:
             async with aiofiles.open(file_path, "wb") as f:
                 await f.write(response.content)
+            _record_host_success(normalized_url)
             return True
 
         byte_stream = BytesIO(response.content)
@@ -1251,6 +1292,7 @@ async def download_dmm_extrafanart_with_filepath(url: str, file_path: Path, fold
             img.save(file_path, quality=95, subsampling=0)
         finally:
             img.close()
+        _record_host_success(normalized_url)
         return True
     except Exception as e:
         LogBuffer.log().write(f"\n 🥺 Download failed! {url}\n    原因: {type(e).__name__}: {e}")

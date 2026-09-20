@@ -11,6 +11,18 @@ body:
           required: true
         - label: 我在提问题之前至少花费了 5 分钟来思考和准备
           required: true
+  - type: dropdown
+    id: ai_disclosure
+    attributes:
+      label: AI 使用披露
+      description: 本议题内容是否使用了 AI 工具？详见仓库 .github/AI_POLICY.md
+      options:
+        - 未使用 AI
+        - AI 部分润色（主要内容人工撰写）
+        - AI 主要撰写（本人已逐项 review 确认属实）
+        - AI 自动化创建（未逐项人工确认）
+    validations:
+      required: false
   - type: input
     id: os_version
     attributes:

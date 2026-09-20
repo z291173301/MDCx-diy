@@ -609,3 +609,59 @@ async def test_download_extrafanart_task_falls_back_to_pics_when_aws_404(
         "https://awsimgsrc.dmm.co.jp/pics_dig/digital/video/504ibw00786z/504ibw00786z-6.jpg",
         "https://pics.dmm.co.jp/digital/video/504ibw00786z/504ibw00786z-6.jpg",
     ]
+
+
+def test_parse_content_range_total():
+    """议题 #30: Content-Range 总大小解析, `/*` 与畸形返回 None。"""
+    assert base_web._parse_content_range_total("bytes 0-1023/512345") == 512345
+    assert base_web._parse_content_range_total("bytes 0-0/28") == 28
+    assert base_web._parse_content_range_total("bytes 0-1023/*") is None
+    assert base_web._parse_content_range_total(None) is None
+    assert base_web._parse_content_range_total("garbage") is None
+
+
+@pytest.mark.asyncio
+async def test_check_url_dmm_uses_range_probe_and_content_range(monkeypatch: pytest.MonkeyPatch):
+    """议题 #30: DMM 探测带 Range+stream 只传头部, 总大小取 Content-Range, 不再整图下载。"""
+    seen: list[dict] = []
+
+    async def fake_request(method: str, url: str, **kwargs):
+        seen.append(kwargs)
+        return (
+            _FakeResponse(
+                "https://awsimgsrc.dmm.co.jp/pics_dig/mono/movie/cjod499/cjod499pl.jpg?w=120&h=90",
+                headers={"Content-Range": "bytes 0-1023/512345"},
+            ),
+            "",
+        )
+
+    monkeypatch.setattr(manager.computed.async_client, "request", fake_request)
+
+    size = await base_web.check_url(
+        "https://awsimgsrc.dmm.co.jp/pics_dig/mono/movie/cjod499/cjod499pl.jpg", length=True
+    )
+
+    assert size == 512345
+    assert seen[0]["stream"] is True
+    assert seen[0]["headers"]["Range"] == "bytes=0-1023"
+
+
+@pytest.mark.asyncio
+async def test_check_url_dmm_falls_back_to_full_get_without_size_headers(monkeypatch: pytest.MonkeyPatch):
+    """议题 #30: 服务器忽略 Range 且不给任何大小头时, 回退一次非流式完整下载判定。"""
+    calls: list[dict] = []
+
+    async def fake_request(method: str, url: str, **kwargs):
+        calls.append(kwargs)
+        if kwargs.get("stream"):
+            return _FakeResponse(url, headers={}), ""
+        return _FakeResponse(url, headers={}, content=b"x" * 4096), ""
+
+    monkeypatch.setattr(manager.computed.async_client, "request", fake_request)
+
+    result = await base_web.check_url("https://awsimgsrc.dmm.co.jp/pics_dig/mono/movie/cjod499/cjod499ps.jpg")
+
+    assert result == "https://awsimgsrc.dmm.co.jp/pics_dig/mono/movie/cjod499/cjod499ps.jpg"
+    assert len(calls) == 2
+    assert calls[0].get("stream") is True
+    assert not calls[1].get("stream")

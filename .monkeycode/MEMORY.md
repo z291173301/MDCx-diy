@@ -146,4 +146,4 @@
   - cid→番号规则：`^(\d*)([a-z]+)(\d+)([a-z]?)$` → `系列大写-{int:03d}`；tenhow cid 离线索引 `resources/userdata/tenhow_asin_cids.json`（36441 条）。
   - **外部归纳数据接入先做候选顺序回归**（覆盖率掩盖顺序污染）；防污染按"顺序影响"分级（append 兜底）而非二元弃用。DMM 路由表再生后必须先全量验证死链再推生产。
   - **DMM cid 结构**：前缀映射 + 数字双态（5 位补零 digital 与 3 位 mono 同系列可并存）+ 双路径；DMM 图床站点下架 CDN 不删对象，占位图 200+<4KB 已拒收。日亚图：SL1500 物理无条码、老商品标题半角片假名（NFKC 必做）、日亚 DVD 封与 DMM digital 封版本不同（比对天花板 ~0.62）。tenhow.net 图床 `images/{ASIN}.jpg` 与日亚 SL1500 同源免代理直取。
-  - **ASIN 校验工程散点**：①数据治理前先 `Counter` 关键列识别导入批次残留；②openpyxl 迭代中 `delete_rows` 跳行，稳定模式=读出→去重→清空重写；③javbus 搜索不识别 ASIN，正查=番号→详情页标题比对；④多源判定合并禁用 or 链短路；⑤外部 API 错误码 marker 取响应原文字面值；⑥v2 裁决链覆盖 95%+，剩余人工行给用户一句话差什么证据。
+  - **ASIN 校验工程散点**：①数据治理前先 `Counter` 关键列识别导入批次残留；②openpyxl 迭代中 `delete_rows` 跳行，稳定模式=读出→去重→清空重写；③javbus 搜索不识别 ASIN，正查=番号→详情页标题比对；④**合并判定禁用 or 链**——`a.get(x) or b.get(x)` 短路吞判定值；#21 再现新形态：`if dict1.pop(k, None) is not None or dict2.pop(k, None) is not None` 短路使 dict2 的 pop 副作用不执行（冷却清零漏清），凡 or 链任一侧带副作用必须先求值再合并；⑤外部 API 错误码 marker 取响应原文字面值；⑥v2 裁决链覆盖 95%+，剩余人工行给用户一句话差什么证据。
