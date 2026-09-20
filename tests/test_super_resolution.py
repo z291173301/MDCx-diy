@@ -11,8 +11,6 @@ from mdcx.config.manager import manager
 from mdcx.config.resources import resources
 from mdcx.core import super_resolution as sr
 
-pytestmark = pytest.mark.asyncio
-
 
 @pytest.fixture(autouse=True)
 def _isolate(tmp_path, monkeypatch):
@@ -59,11 +57,13 @@ def test_download_urls_cover_three_platforms():
         assert all(u.startswith("https://github.com/") for u in urls.values())
 
 
+@pytest.mark.asyncio
 async def test_ensure_binary_unsupported_platform(monkeypatch):
     monkeypatch.setattr(sr.sys, "platform", "plan9")
     assert await sr.ensure_binary("realesrgan") is None
 
 
+@pytest.mark.asyncio
 async def test_maybe_upscale_replaces_atomically(tmp_path, monkeypatch):
     poster = tmp_path / "poster.jpg"
     _make_jpg(poster, 300, 450)
@@ -76,10 +76,12 @@ async def test_maybe_upscale_replaces_atomically(tmp_path, monkeypatch):
     monkeypatch.setattr(sr, "upscale_image", fake_upscale)
     assert await sr.maybe_upscale_poster(poster) is True
     assert max(Image.open(poster).size) == 1800
-    assert list(tmp_path.glob("*[SR]*")) == [], "临时产物须清理"
+    leftovers = [p for p in tmp_path.rglob("*") if "[SR]" in p.name]
+    assert leftovers == [], "临时产物须清理"
     assert original != poster.read_bytes()
 
 
+@pytest.mark.asyncio
 async def test_maybe_upscale_rejects_non_enlarged_output(tmp_path, monkeypatch):
     poster = tmp_path / "poster.jpg"
     _make_jpg(poster, 300, 450)
@@ -94,6 +96,7 @@ async def test_maybe_upscale_rejects_non_enlarged_output(tmp_path, monkeypatch):
     assert poster.read_bytes() == before, "产物未增大必须弃用并保持原图"
 
 
+@pytest.mark.asyncio
 async def test_maybe_upscale_failure_keeps_original(tmp_path, monkeypatch):
     poster = tmp_path / "poster.jpg"
     _make_jpg(poster, 300, 450)
@@ -107,6 +110,7 @@ async def test_maybe_upscale_failure_keeps_original(tmp_path, monkeypatch):
     assert poster.read_bytes() == before
 
 
+@pytest.mark.asyncio
 async def test_upscale_image_timeout_degrades(monkeypatch, tmp_path):
     src = tmp_path / "a.jpg"
     dst = tmp_path / "b.jpg"

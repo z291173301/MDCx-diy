@@ -14,7 +14,7 @@
   - **检查纪律**：每次代码改动后跑 `uv run quick-check`；提交前跑 `uv run check --skip-hook-install`。仅改 `docs/*.md` 或本文件时只需 `git diff --check`。全绿判定 = 退出码 0 + `grep -E "\.py:[0-9]+: error|Found [0-9]+ error"` 无输出（CI 连挂三次的教训：mypy 输出可被 tail 截断）。**`ruff check` 过 ≠ `ruff format --check` 过——改 .py 必须 `ruff format` 落地**（2026-09-09 四次 CI 挂全是 format 漂移）。`scripts/` 也在 check 范围。**pre-push 钩子三注意（2026-09-20 实证）**：①`hooksPath` 是本地 git config，**环境重置后静默失效**——而日常跑的 `check --skip-hook-install` 恰恰跳过自动配置钩子那步，两者叠加导致失效无人察觉；重置后先 `git config core.hooksPath` 验证，为空则 `git config core.hooksPath .githooks` 补配置；②钩子生效时日常流程=「quick-check → commit → push（钩子自动全量）」，**不要再手动多跑一次全量**（省 3 分钟）；③钩子失效期间推送前必须手动全量 check 兜底；④`.pre-commit-config.yaml` 为历史遗留、不依赖。
   - 提交前必看 `git status` 未跟踪文件：运行残留与中间产物不得 `git add -A` 入库，先 `.gitignore` 排除。
   - **提交信息不要手写 Co-authored-by trailer**：`prepare-commit-msg` 署名 hook 每次 commit/amend 从 git config 的 `coauthor.*` 无条件追加，手写会重复。**hooksPath 双向坑（2026-09-20 实证）**：署名 hook 原在 `.git/hooks/`（不在 .githooks/），一旦 `git config core.hooksPath .githooks` 启用 pre-push，`.git/hooks` 下全部 hook 即被重定向**静默失效**（当天连丢 3 个提交的署名才发现）——现已把 prepare-commit-msg 收编进 `.githooks/` 入库（b1a726a0），两 hook 同目录自洽；环境重置后补一条 `git config core.hooksPath .githooks` 即同时恢复署名与推送自检。
-  - **"本地全绿≠CI 通过"三维度**：输出截断 / 版本语义差异（模块级带值注解 3.13 立即求值 vs 3.14 PEP 649 延迟，单例声明一律无注解赋值）/ 平台差异。Windows runner：`subprocess.run(text=True)` 一律显式 `encoding="utf-8", errors="replace"`（默认 GBK 遇 UTF-8 字节炸链）。
+  - **"本地全绿≠CI 通过"三维度**：输出截断 / 版本语义差异（模块级带值注解 3.13 立即求值 vs 3.14 PEP 649 延迟，单例声明一律无注解赋值）/ 平台差异。Windows runner 两坑：①`subprocess.run(text=True)` 一律显式 `encoding="utf-8", errors="replace"`（默认 GBK 遇 UTF-8 字节炸链）；②**glob 模式里 `[XX]` 是字符类不是字面量**，而 Windows 下 `pathlib.glob` 默认大小写不敏感（`pathlib/__init__.py`: 非 posix 即 case_sensitive=False），`glob("*[SR]*")` 会命中 `poster.jpg`（含小写 s）造成假红——断言"临时产物已清理"一律用 `[p for p in tmp_path.rglob("*") if "[SR]" in p.name]` 形式，别用 glob 通配符。
   - **changelog/版本纪律**：提交前更新 `docs/changelog.md` 当前版本条目（版本号归属用户，不擅自开新段）；写法=用户视角发布说明（留议题号/现象/结果，删排查叙事与哈希）。版本同步用 `scripts/bump.py --version <YYYYMMDD> --name <X.Y.Z>`，`bump.py --check` 与 `tests/test_version_consistency.py` 兜底。**"已发版"判据 = 数字 tag 已推送（`git ls-remote --tags origin`），不是 changelog 有没有该段**；当前版本未发版时被后续议题取代的条目要合并重写成最终形态。
   - 站点/爬虫/配置改动同步检查：UI 文案、README、docs、爬虫总数（`get_registered_crawler_sites()`）、**`config/migrations.py` 旧值清洗**（漏迁移 → pydantic 校验失败 → "保存不生效"）。
   - **写死数字前 grep 代码核实**。高频漂移锚点：默认网站源顺序、代理域名列表、命名变量表、设置 Tab 名、字段优先级数、演员库列、指纹池、主窗口行数。README 爬虫数四处同步 + FEATURES.md 标题是独立第五处。**Wiki 维护纪律**：`wiki/` 目录是 GitHub Wiki 内容源；每次回帖议题后把通用答案回填 FAQ；Wiki 仓库需用户先网页建首页才能克隆。
@@ -59,7 +59,7 @@
 - Category: 排错调试
 - Instructions:
   - **仓库根 `config.json` 是脏配置**，验证配置/网络栈用 `Config()` 默认配置写临时文件再指 `manager.path`。
-  - **行为修复流程：先复现测试跑红 → 修 → 绿 → 反向验证**（修复前代码喂测试确认转红防恒真）；修复后反向审查边界与调用点语义。pytest-asyncio strict：async 测试文件顶部 `pytestmark = pytest.mark.asyncio`。
+  - **行为修复流程：先复现测试跑红 → 修 → 绿 → 反向验证**（修复前代码喂测试确认转红防恒真）；修复后反向审查边界与调用点语义。pytest-asyncio strict 标记纪律：文件内**全是** async 测试才用顶部 `pytestmark = pytest.mark.asyncio`；混有同步测试时必须逐函数加 `@pytest.mark.asyncio`，文件级 pytestmark 会给同步函数误打标记刷满 `PytestWarning`。
   - **测试必须喂生产形态数据，不手造**（#174/#176 同族两实证）：回标链路 spec 的 `name`/`site`/`group` 从生产构建函数取或逐项对齐；网页解析夹具用真实页面快照入 `tests/fixtures/`（手写 HTML 在 get_text 拼接细节上漂移造成假红/假绿；真实快照还能锁模板级共性结构）。
   - 结构约束类修复用 **AST 哨兵**锁位置（await 找 `ast.Await` 包装节点，无 `node.await`）；写完拿修复前代码反向喂哨兵确认判失败。
   - **conftest dummy 双陷阱**：①实例属性遮蔽真实 manager 属性；②真实 manager 加新方法必须同步给 dummy 加同名（缺了在 Qt 测试以 qFatal abort 形态爆）。绕 dummy 用独立 `uv run python` 脚本或 AST 哨兵。
