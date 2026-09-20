@@ -673,9 +673,11 @@ class Config(BaseModel):
     # endregion
 
     # region: Poster Super-Resolution (议题 #26)
-    poster_sr_enabled: bool = Field(default=False, title="海报超分增强(首次使用自动下载ncnn-vulkan工具)")
+    poster_sr_enabled: bool = Field(
+        default=True, title="海报超分增强(Windows/Linux 打包版内置工具, 其余平台首次使用自动下载)"
+    )
     poster_sr_preset: str = Field(default="realesr-photo-4x", title="海报超分预设 realesr-photo-4x/waifu-photo-2x")
-    poster_sr_max_dim: int = Field(default=1200, ge=64, le=8192, title="海报最长边小于此值才超分")
+    poster_sr_max_dim: int = Field(default=800, ge=64, le=8192, title="海报最长边小于此值才超分")
     # endregion
 
     # region: Watermark Settings

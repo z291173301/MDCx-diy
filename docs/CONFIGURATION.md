@@ -98,6 +98,22 @@
 | 官方图源兜底 | 图源全部失败时直构官方 CDN 高清图兜底：DMM 高清封面（自动学习厂牌前缀）+ MGStage 素人高清海报 |
 | 人脸裁剪 | 开启后用 OpenCV 检测人脸位置并裁剪为 2:3 海报 |
 | NFO 包含 | NFO 里包含哪些内容（演员/标签/系列/制作商等）|
+| 海报超分 | 落盘海报最长边低于阈值（默认 800px）时 AI 超分放大补清（默认开启，实验性）|
+
+### 海报超分
+
+| 配置项 | 作用 |
+|-------|------|
+| `poster_sr_enabled` | 总开关，默认开启（对应设置项「海报超分」）|
+| `poster_sr_preset` | 放大预设：`realesr-photo-4x`（Real-ESRGAN 4x）或 `waifu-photo-2x`（waifu2x 2x）|
+| `poster_sr_max_dim` | 最长边小于此值才触发超分，默认 800px（1200 会把常见站点默认封面几乎全部纳入）|
+
+工具的获取方式（由打包形态决定，不需要手动下载）：
+
+- **Windows / Linux 打包版**：工具已内置在包里，首次使用时释放到 `userdata/sr/tools/<tool>/` 后使用。
+- **macOS 打包版 / 源码运行**：首次使用时从官方 GitHub Release 下载（约 30-60MB，仅一次），校验 sha256 后解压到同一目录。
+
+下载失败、无 Vulkan 环境或超时都只会静默降级保持原图，不影响刮削结果。也可以手动下载解压到 `userdata/sr/tools/realesrgan/` 与 `userdata/sr/tools/waifu2x/`（二进制名为 `<tool>-ncnn-vulkan[.exe]`，需与其 `models` 目录同级）。第三方工具许可见 `resources/licenses/sr/`。
 
 ## 水印
 

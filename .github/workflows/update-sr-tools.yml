@@ -1,0 +1,59 @@
+# 定期刷新「海报超分」工具缓存，供打包工作流复用。
+#
+# 工具二进制不入库：打包时由 scripts/fetch_sr_tools.py 从官方 GitHub Release 拉取，
+# 校验 sha256 后解压到 build/sr_tools。这里按月预热 actions/cache，
+# 让 release.yml / package-trawl.yml 打包时免下载、提速构建。
+#
+# 刷新失败（上游重新打包导致 sha256 不匹配）会让作业变红并保留旧缓存，
+# 避免坏包扩散到发布产物。
+
+name: Update SR tools cache
+
+on:
+  schedule:
+    # 每周一 03:00 UTC（北京时间 11:00）。周频的另一个理由：
+    # GitHub Actions 缓存 7 天无人访问会被回收，周更能保证打包时缓存常热。
+    - cron: "0 3 * * 1"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  refresh:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - build: windows
+            os: windows-2025
+          - build: linux
+            os: ubuntu-latest
+    runs-on: ${{ matrix.os }}
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v7
+
+      - name: Set up Python
+        uses: actions/setup-python@v7
+
+      - name: Set up uv
+        uses: astral-sh/setup-uv@v10.1.0
+        with:
+          activate-environment: true
+
+      - name: Install locked dependencies
+        shell: bash
+        run: uv sync --locked --all-extras --dev
+
+      - name: Cache SR tools
+        uses: actions/cache@v4
+        with:
+          path: build/sr_tools
+          key: sr-tools-${{ matrix.build }}
+
+      - name: Refresh SR tools
+        shell: bash
+        env:
+          PYTHONIOENCODING: utf-8
+        run: uv run python -m scripts.fetch_sr_tools --platform ${{ matrix.build }}

@@ -46,6 +46,10 @@ EXCLUDED_MODULES = [
 class BuildError(Exception): ...
 
 
+# 构建期拉取的超分工具目录（由 scripts/fetch_sr_tools.py 生成，不入 git）
+SR_TOOLS_DIR = "build/sr_tools"
+
+
 def get_version_from_config() -> str:
     p = Path("mdcx/consts.py")
     if not p.exists():
@@ -144,6 +148,23 @@ class BuildManager:
             if not Path(file_path).exists():
                 raise BuildError(f"文件检查失败: {file_path}")
 
+    def _sr_tools_binary_args(self) -> list[str]:
+        """一体包（Windows/Linux）内嵌超分工具目录；macOS 不内嵌。
+
+        目录内容由构建期 `scripts/fetch_sr_tools.py` 拉取（二进制不入库）。
+        macOS 不内嵌的原因：.app 里放未签名的第三方可执行二进制会触发 Gatekeeper
+        拦截，且「先签名后打包」的顺序会变脆（公证基本走不通）。
+        """
+        if not (self.is_windows or self.is_linux):
+            return []
+        root = Path(SR_TOOLS_DIR)
+        if not root.is_dir():
+            return []
+        args: list[str] = []
+        for item in sorted(path for path in root.iterdir() if path.is_dir()):
+            args.extend(["--add-binary", f"{item}{os.pathsep}sr_tools/{item.name}"])
+        return args
+
     def _generate_spec(self):
         """生成.spec文件"""
         logger.info("生成 .spec 文件...")
@@ -225,6 +246,9 @@ class BuildManager:
             "pydantic",
             *[item for module in EXCLUDED_MODULES for item in ("--exclude-module", module)],
         ]
+
+        # 超分工具一体包：把打包期拉取的工具整目录带上（含 models 与依赖库）
+        cmd.extend(self._sr_tools_binary_args())
 
         # curl_cffi 0.16+ 的 Windows wheel 用 delvewheel 打包, libcurl 等 DLL 放在包外兄弟目录
         # curl_cffi.libs。--collect-all curl_cffi 只递归包内目录, 不会收集它, 若只靠 PyInstaller

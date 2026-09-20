@@ -230,11 +230,17 @@
 
 ## 2026-09-20 开源生态调研第二批（amane / javdb-cli / OpenAver / sakuramedia / JavBoss / javinizer-go / missav-api / dmm-proxy-api）
 
-### 26. 低清海报超分增强 ✅（2026-09-20 完整落地：core/super_resolution.py + scraper 挂接 + 下载高清图组 UI 开关 + 9 测试）
+### 26. 低清海报超分增强 ✅（2026-09-20 定稿：core/super_resolution.py + scraper 挂接 + 下载高清图组 UI 开关 + 构建期一体包 + 周更缓存工作流）
 - **价值：中**　**难度：中**（2-3 天）
-- amane 方案（直接采纳）：**ncnn-vulkan 外部二进制 + 按平台首次使用时下载**（Real-ESRGAN xinntao v0.2.5.0 / waifu2x nihui 20250915 的 GitHub release，darwin/linux/win32 三平台 zip），不随包分发、免 torch/ONNX 大依赖
+- amane 方案（直接采纳）：**ncnn-vulkan 外部二进制**（Real-ESRGAN xinntao v0.2.5.0 / waifu2x nihui 20250915 的 GitHub release，darwin/linux/win32 三平台 zip），免 torch/ONNX 大依赖
 - 预设制：`realesr-photo-4x`（realesrgan-x4plus 4x 无降噪）/ `waifu-photo-2x`（upconv_7_photo 2x）
-- 触发策略（我们侧）：默认关，仅"无高清候选且源图宽度 < 阈值"时对 poster 跑一次；产物按输入 hash 缓存；失败静默降级用原图
+- **分发形态（2026-09-20 定）**：Windows / Linux 打包版**内置**工具（`scripts/fetch_sr_tools.py` 构建期拉取 → `build/sr_tools`，运行时整目录释放到 `userdata/sr/tools/<tool>/` 后执行）；macOS 打包版与源码运行首次使用时按需下载
+- **默认值（2026-09-20 定）**：`poster_sr_enabled` 默认**开启**；`poster_sr_max_dim` 默认 **800**（原 1200 会把常见站点封面几乎全部纳入放大，代价过高）
+- **不做镜像/加速配置**：第三方加速服务随时停服/换域名，硬编码等于给软件加会过期的依赖；改为构建期在 CI 侧获取
+- 下载完整性：内置官方 zip 基准 sha256，校验不符即判该源失败并降级；超时收敛为连接 30s / 读 120s，临时失败重试 1 次
+- 可观测性：工具不可用/执行失败时**一次性**打印可读结论（含「未检测到可用的 Vulkan 设备」判定），批刮不刷屏
+- 硬件前提：需支持 Vulkan 的 GPU；Intel 集显需第 6 代酷睿（Skylake）及更新，更老的不支持
+- 2026-09-20 修复两处让功能从未生效的缺陷：①Real-ESRGAN 的 Linux 资产名为 `ubuntu` 而非 `linux`（实测 404）；②两个工具的包内二进制均名为 `<tool>-ncnn-vulkan`，按工具名查找永远找不到，表现为「每次重下后判定不可用而降级」
 - 注意：ncnn-vulkan 需 Vulkan 运行库（Win10+/macOS MoltenVK 随包/Linux 驱动），打包版冒烟必测
 
 ### 27. 磁盘监控自动刮削 ⬜（来源 amane，2026-09-20 已深挖，实现路径已定）

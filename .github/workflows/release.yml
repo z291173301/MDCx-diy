@@ -116,6 +116,22 @@ jobs:
         shell: bash
         run: uv sync --locked --all-extras --dev
 
+      # 超分工具一体包：Windows/Linux 打包期内嵌（macOS 不内嵌，保持首次使用按需下载）。
+      # 缓存由 update-sr-tools.yml 定期刷新；命中时 fetch 脚本幂等跳过下载，未命中则直接拉取。
+      - name: Restore SR tools cache (Windows/Linux)
+        if: ${{ matrix.build == 'windows' || matrix.build == 'linux' }}
+        uses: actions/cache@v4
+        with:
+          path: build/sr_tools
+          key: sr-tools-${{ matrix.build }}
+
+      - name: Fetch SR tools (Windows/Linux)
+        if: ${{ matrix.build == 'windows' || matrix.build == 'linux' }}
+        shell: bash
+        env:
+          PYTHONIOENCODING: utf-8
+        run: uv run python -m scripts.fetch_sr_tools --platform ${{ matrix.build }}
+
       - name: Build macOS app - macOS
         if: ${{ matrix.build == 'macos' }}
         run: |

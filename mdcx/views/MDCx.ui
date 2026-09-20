@@ -10844,7 +10844,7 @@
                               </sizepolicy>
                             </property>
                             <property name="toolTip">
-                              <string>首次使用会自动从 GitHub 下载超分工具（约30-60MB，仅一次）；预设默认 Real-ESRGAN 4x，可在配置 json 用 poster_sr_preset 改 waifu-photo-2x；最长边阈值默认 1200px，可用 poster_sr_max_dim 调整</string>
+                              <string>对落盘海报做 AI 放大，仅当最长边低于阈值时触发（默认 800px）；Windows/Linux 打包版已内置工具，macOS 与源码运行首次使用时从 GitHub 下载（约 30-60MB，仅一次）；预设默认 Real-ESRGAN 4x，可在配置 json 用 poster_sr_preset / poster_sr_max_dim 调整</string>
                             </property>
                             <property name="text">
                               <string>海报超分（实验）</string>
