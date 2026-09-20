@@ -159,6 +159,9 @@ class BuildManager:
             return []
         root = Path(SR_TOOLS_DIR)
         if not root.is_dir():
+            logger.warning(
+                f"未找到超分工具目录 {SR_TOOLS_DIR}（打包前需先跑 scripts/fetch_sr_tools.py），本次产物不内嵌工具"
+            )
             return []
         args: list[str] = []
         for item in sorted(path for path in root.iterdir() if path.is_dir()):

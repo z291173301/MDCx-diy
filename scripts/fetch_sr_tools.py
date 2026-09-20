@@ -34,6 +34,8 @@ from mdcx.core.super_resolution import (
 
 CONNECT_TIMEOUT = 30.0
 READ_TIMEOUT = 120.0
+# 构建期拉取允许失败一次后重试：CI 偶发抖动不应直接卡住发版
+DOWNLOAD_ATTEMPTS = 2
 
 # 与打包参数 `sr_tools/<tool>` 保持一致，运行时按 `sys._MEIPASS / "sr_tools" / tool` 查找
 DEFAULT_DEST = "build/sr_tools"
@@ -81,21 +83,31 @@ def _download(url: str) -> bytes:
 
 
 def fetch_tool(tool: str, platform: str, dest: Path, force: bool = False) -> str:
+    """拉取单个工具到 `<dest>/<tool>`；失败抛出，由调用方决定是否中止打包。"""
     url = _TOOL_DOWNLOAD_URLS[tool][platform]
     target = tool_dir(dest, tool)
     if not force and is_ready(dest, tool):
         return f"跳过 {tool}: 已就绪 {target}"
-    data = _download(url)
-    expected = _TOOL_CHECKSUMS.get(tool, {}).get(platform, "")
-    actual = hashlib.sha256(data).hexdigest()
-    if expected and actual != expected:
-        raise RuntimeError(f"sha256 不匹配 {tool}/{platform}: 期望 {expected[:12]}… 实际 {actual[:12]}…")
-    if not expected:
-        print(f"⚠️ {tool}/{platform} 无基准 sha256，跳过校验并解压（建议补进 _TOOL_CHECKSUMS）")
-    _extract(data, target)
-    if not is_ready(dest, tool):
-        raise RuntimeError(f"解压产物不可执行: {target}")
-    return f"就绪 {tool}/{platform}: {len(data) / 1048576:.2f} MB <- {url} (sha256 {actual[:12]}…)"
+    last_error = ""
+    for attempt in range(1, DOWNLOAD_ATTEMPTS + 1):
+        try:
+            data = _download(url)
+        except Exception as e:
+            last_error = f"第 {attempt} 次下载失败: {e}"
+            print(f"⚠️ {tool}/{platform} {last_error}")
+            continue
+        expected = _TOOL_CHECKSUMS.get(tool, {}).get(platform, "")
+        actual = hashlib.sha256(data).hexdigest()
+        if expected and actual != expected:
+            raise RuntimeError(f"sha256 不匹配 {tool}/{platform}: 期望 {expected[:12]}… 实际 {actual[:12]}…")
+        if not expected:
+            print(f"⚠️ {tool}/{platform} 无基准 sha256，跳过校验并解压（建议补进 _TOOL_CHECKSUMS）")
+        _extract(data, target)
+        if is_ready(dest, tool):
+            return f"就绪 {tool}/{platform}: {len(data) / 1048576:.2f} MB <- {url} (sha256 {actual[:12]}…)"
+        last_error = f"第 {attempt} 次解压产物不可执行"
+        print(f"⚠️ {tool}/{platform} {last_error}")
+    raise RuntimeError(last_error or "未知原因")
 
 
 def main() -> int:
