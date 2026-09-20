@@ -7,6 +7,7 @@ import os
 import sys
 import zipfile
 from io import BytesIO
+from pathlib import Path
 
 import pytest
 
@@ -25,12 +26,21 @@ def _isolate(tmp_path, monkeypatch):
     yield
 
 
+def _write_binary(tool_dir: Path, tool: str) -> None:
+    """在给定目录下造一个「可执行文件」占位。
+
+    文件名必须复用生产侧的 `sr._binary_name()` 推导（Windows 带 .exe），
+    否则测试夹具与运行时查找路径又会在 Windows 上错位。
+    """
+    tool_dir.mkdir(parents=True, exist_ok=True)
+    (tool_dir / sr._binary_name(tool)).write_text("#!/bin/sh\nexit 0")
+
+
 def _make_tool_zip(tool: str) -> bytes:
-    """构造官方形态的 zip：顶层目录 `<tool>/`，二进制名为 `<tool>-ncnn-vulkan`。"""
-    name = f"{tool}-ncnn-vulkan.exe" if sys.platform == "win32" else f"{tool}-ncnn-vulkan"
+    """构造官方形态的 zip：顶层目录 `<tool>/`，二进制名按平台推导。"""
     buffer = BytesIO()
     with zipfile.ZipFile(buffer, "w") as zf:
-        zf.writestr(f"{tool}/{name}", b"fake binary")
+        zf.writestr(f"{tool}/{sr._binary_name(tool)}", b"fake binary")
         zf.writestr(f"{tool}/models/dummy.param", b"dummy")
     return buffer.getvalue()
 
@@ -60,9 +70,8 @@ def test_fetch_tool_rejects_checksum_mismatch(tmp_path, monkeypatch):
 def test_fetch_tool_skips_download_when_ready(tmp_path, monkeypatch):
     tool = "realesrgan"
     target = tmp_path / "sr_tools" / tool
-    target.mkdir(parents=True)
-    binary = target / ("realesrgan-ncnn-vulkan.exe" if sys.platform == "win32" else "realesrgan-ncnn-vulkan")
-    binary.write_text("#!/bin/sh\nexit 0")
+    binary = target / sr._binary_name(tool)
+    _write_binary(target, tool)
     binary.chmod(0o755)
 
     def fail(url):
@@ -79,8 +88,7 @@ async def test_bundled_layout_matches_runtime_lookup(tmp_path, monkeypatch):
     data_root = tmp_path / "data"
     monkeypatch.setattr(resources, "u", lambda rel: data_root / rel)
     mei = tmp_path / "mei" / "sr_tools" / "realesrgan"
-    mei.mkdir(parents=True)
-    (mei / "realesrgan-ncnn-vulkan").write_text("#!/bin/sh\nexit 0")
+    _write_binary(mei, "realesrgan")
     monkeypatch.setattr(sr.sys, "_MEIPASS", str(tmp_path / "mei"), raising=False)
 
     assert sr._builtin_dir("realesrgan") == mei
