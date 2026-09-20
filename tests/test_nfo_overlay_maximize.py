@@ -209,3 +209,44 @@ def test_dirty_switch_cancel_keeps_current_number(win, monkeypatch):
     assert not ui.widget_nfo.isHidden()
     selected = [item.text(0) for item in ui.treeWidget_number.selectedItems()]
     assert selected == [first.text(0)]
+
+
+def test_page_change_hides_overlay(win):
+    """议题 #177: 切页(非主界面)时编辑 NFO 面板暂隐, 切回主界面自动恢复。"""
+    ui = win.Ui
+    _open_overlay(win)
+    assert not ui.widget_nfo.isHidden()
+    ui.stackedWidget.setCurrentIndex(1)
+    assert ui.widget_nfo.isHidden(), "切到日志页面板未暂隐"
+    assert ui.stackedWidget.currentIndex() == 1
+    ui.stackedWidget.setCurrentIndex(0)
+    assert not ui.widget_nfo.isHidden(), "切回主界面面板未恢复"
+
+
+def test_page_change_dirty_cancel_keeps_panel(win, monkeypatch):
+    """议题 #177: 未保存改动时切页被取消, 面板保持打开留在主界面。"""
+    ui = win.Ui
+    first = _add_result(win, "1-1.ABP-622", "ABP-622", "标题622")
+    _select_result(win, first)
+    _open_overlay(win)
+    ui.lineEdit_nfo_title.setText("改过的标题")
+    monkeypatch.setattr(QMessageBox, "exec", lambda self: QMessageBox.StandardButton.Cancel)
+
+    ui.stackedWidget.setCurrentIndex(1)
+    assert ui.stackedWidget.currentIndex() == 0, "未保存时切页未被取消"
+    assert not ui.widget_nfo.isHidden(), "取消切页后面板应保持打开"
+
+
+def test_page_change_dirty_save_proceeds(win, monkeypatch):
+    """议题 #177: 未保存改动时选保存则允许切页, 面板随切页暂隐。"""
+    ui = win.Ui
+    first = _add_result(win, "1-1.ABP-622", "ABP-622", "标题622")
+    _select_result(win, first)
+    _open_overlay(win)
+    monkeypatch.setattr(win, "save_nfo_info", lambda: None)
+    monkeypatch.setattr(QMessageBox, "exec", lambda self: QMessageBox.StandardButton.Save)
+    ui.lineEdit_nfo_title.setText("改过的标题")
+
+    ui.stackedWidget.setCurrentIndex(1)
+    assert ui.stackedWidget.currentIndex() == 1, "选保存后切页未被执行"
+    assert ui.widget_nfo.isHidden(), "选保存切页后面板应暂隐"

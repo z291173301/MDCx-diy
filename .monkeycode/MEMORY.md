@@ -60,6 +60,8 @@
   - **仓库根 `config.json` 是脏配置**（含已删站点值），验证配置/网络栈行为须用 `Config()` 默认配置写临时文件再指 `manager.path`。
   - 泄漏/累积类问题先写最小复现脚本量化（gc/asyncio.all_tasks 计数 + 对照实验区分"每次泄漏"与"泄漏一次钉住"）。
   - **行为修复"先复现测试跑红 → 修 → 绿"**；修复后反向审查边界与调用点语义。pytest-asyncio strict 模式：async 测试文件顶部须 `pytestmark = pytest.mark.asyncio`。
+  - **锁「检测结果回标下拉」必须喂生产形态 spec，不能手造 `name=site.value`**（#174 实证）：#129 测试用 `NetworkCheckSpec(name=site.value, site=THEPORNDB)` 合并缓存全绿，但生产 ThePornDB 项 `name="ThePornDB Token"` 且漏挂 `site=`，真实检测写不进缓存。凡回标链路测试，spec 的 `name`/`site`/`group` 要从 `_build_static_specs`/`_build_site_specs` 取或按生产字段逐项对齐。
+  - **网页解析回归夹具用真实页面快照入库（tests/fixtures/），别手写 HTML**（#176 实证，与 #174 生产形态 spec 同族）：手写夹具在文本拼接细节上与真实 DOM 漂移（bs4 `get_text("")` 会拼进 display:none span、括号内空格、`<a>` 拆分日期段），造成假红/假绿——本轮手写夹具漏了 `(bday)` 括号让测试红了一个与 bug 无关的点；真实快照还能锁住"模板级共性"（日文 ActorActress 的 td 全带 text-align 这类整族结构）。流程：curl 抓真实页 → 抽出目标结构片段存 fixture → 参数化测试；反向验证（修复前代码喂测试确认转红）时夹具失真也会现形。
   - 结构约束类修复用 **AST 哨兵测试**锁定位置；写完拿修复前代码反向喂哨兵确认能判失败（防恒真）。注意 ast 无 `node.await` 属性——await 调用要找 `ast.Await` 包装节点。
   - conftest 用 dummy 替换了 `mdcx.config.manager`/`resources`/`signals`；独立验证脚本须 import mdcx 前手工注入同样 dummy。**dummy 桩加方法时同步更新 conftest 注释**（缺方法会以 AttributeError 形态在 Qt 测试里触发 qFatal abort）。
   - **subagent 排查要求输出"已排除假设清单+理由"**；标注"已验证"的结论不可直接采信（实证：22 项宣称 11 项编造/夸大），修复前必须独立复现脚本重现每一条。

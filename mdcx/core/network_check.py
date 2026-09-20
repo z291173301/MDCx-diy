@@ -918,6 +918,7 @@ def _build_static_specs() -> list[NetworkCheckSpec]:
                 name="ThePornDB Token",
                 group="账号/API",
                 url="https://api.theporndb.net/scenes/hash/8679fcbdd29fa735",
+                site=Website.THEPORNDB,
                 headers={
                     "Authorization": f"Bearer {api_token}",
                     "Content-Type": "application/json",
@@ -932,6 +933,7 @@ def _build_static_specs() -> list[NetworkCheckSpec]:
                 name="ThePornDB Token",
                 group="账号/API",
                 url="",
+                site=Website.THEPORNDB,
                 warning_if_missing="未填写 API Token，影响欧美刮削",
             )
         )

@@ -330,6 +330,13 @@ def test_maximize_content_follow_all_pages(win, app):
     assert win.Ui.label_file_path.width() == pytest.approx(win.Ui.page_main.width() - 34, abs=6), (
         f"软件界面文件路径标签未拉伸: {win.Ui.label_file_path.width()}"
     )
+    # 议题 #173: 结果树宽随 cover_scale 拉伸贴向缩略图右缘, 最大化时左缘到缩略图右缘
+    # 的 gap 应收窄(不再像固定 202 宽那样离缩略图 280px), 右缘仍贴页面右 18px。
+    tree = win.Ui.treeWidget_number
+    cover_scale = win.Ui.page_main.width() / 820
+    thumb_right = int(580 * cover_scale)
+    tree_gap_l = tree.x() - thumb_right
+    assert tree_gap_l <= 80, f"结果树左缘到缩略图右缘 gap 未收窄: {tree_gap_l}px"
     # 工具/设置页为休眠页：容器几何即时跟随即可（content 拉伸在切页 show 时验证，
     # 见 test_switch_to_pages_after_maximize_content_visible）
     assert tool_scroll.width() == pytest.approx(win.Ui.page_tool.width() - 40, abs=4), (

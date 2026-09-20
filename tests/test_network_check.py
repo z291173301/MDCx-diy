@@ -1401,3 +1401,68 @@ async def test_official_generates_five_sub_specs(monkeypatch):
     assert len(official_specs) == len(UNCENSORED_OFFICIAL_SITES) == 5
     assert {s.name for s in official_specs} == {f"official·{src}" for src in UNCENSORED_OFFICIAL_SITES}
     assert all(s.url and s.url.startswith("https://") for s in official_specs)
+
+
+def test_theporndb_token_spec_binds_site_without_token():
+    """未填 Token 时 ThePornDB 检测项也必须带 site，才能回标网站设置下拉（#174）。"""
+    spec = next(s for s in nc._build_static_specs() if s.name == "ThePornDB Token")
+    assert spec.site == Website.THEPORNDB
+    assert spec.group == "账号/API"
+    assert spec.warning_if_missing
+
+
+def test_theporndb_token_spec_binds_site_with_token(monkeypatch):
+    """已填 Token 时检测项同样带 site=theporndb（#174）。"""
+
+    class Cfg(FakeConfig):
+        theporndb_api_token = "tok"
+
+    class Mgr:
+        config = Cfg()
+        computed = None
+
+    monkeypatch.setattr("mdcx.core.network_check._manager", lambda: Mgr())
+    spec = next(s for s in nc._build_static_specs() if s.name == "ThePornDB Token")
+    assert spec.site == Website.THEPORNDB
+    assert spec.validator == "theporndb_token"
+    assert "api.theporndb.net" in spec.url
+
+
+def test_merge_cache_uses_theporndb_token_production_spec(monkeypatch, tmp_path):
+    """用生产形态的 ThePornDB Token spec（name 不是站点值）合并缓存，键必须是 theporndb。"""
+    monkeypatch.setattr(nc, "_site_cache_path", lambda: tmp_path / "cache.json")
+    spec = NetworkCheckSpec(
+        name="ThePornDB Token",
+        group="账号/API",
+        url="https://api.theporndb.net/scenes/hash/x",
+        site=Website.THEPORNDB,
+        validator="theporndb_token",
+    )
+    merge_site_check_cache(
+        [NetworkCheckResult(spec=spec, status=NetworkCheckStatus.OK, message="API Token 有效", used_proxy=True)]
+    )
+    cache = load_site_check_cache()
+    assert cache["theporndb"]["status"] == "ok"
+
+
+@pytest.mark.anyio
+async def test_thejavdb_api_spec_has_site_for_badge(monkeypatch: pytest.MonkeyPatch):
+    """thejavdb_api 生产检测项带 site 归属，网站设置下拉能回标（#129/#174）。"""
+
+    class ThejavdbApiCrawlerStub:
+        @classmethod
+        def base_url_(cls):
+            return "https://api.thejavdb.net/v1"
+
+    fake_crawlers = SimpleNamespace(
+        get_registered_crawler_sites=lambda include_hidden=False: [Website.THEJAVDB_API],
+        get_crawler=lambda site: ThejavdbApiCrawlerStub,
+    )
+    monkeypatch.setitem(sys.modules, "mdcx.crawlers", fake_crawlers)
+
+    specs = await build_network_check_specs()
+    spec = next(s for s in specs if s.site == Website.THEJAVDB_API)
+    assert spec.name == "thejavdb_api"
+    assert spec.group == "账号/API"
+    assert spec.validator == "thejavdb_api"
+    assert spec.url.endswith("/movies?q=ssni-200")

@@ -388,6 +388,33 @@ def _extract_introduction(actor_output: bs4.Tag) -> str:
     return overview
 
 
+def _iter_infobox_pairs(actor_profile: bs4.Tag):
+    """按行配对 infobox 的键值单元格（议题 #176）。
+
+    旧实现全局收集 `th[scope=row]` 与 `td[style=""][colspan 缺省]` 两个列表再比长度：
+    日文 ActorActress 模板的 td 一律带 `style="text-align:left;"`，一个都收集不到；
+    表头（仅 th colspan=2）与页脚（仅 td colspan=2）又会让两个列表长度错位——
+    于是正常页面也报「列数不匹配」并整表跳过，生日/出生地全部丢失。
+    改为逐 tr 配对：行内 `th[scope=row]` 配该行第一个非 colspan 的 td，
+    标题行/分区行/页脚行天然不成对、直接跳过，互不干扰。
+    """
+    for tr in actor_profile.find_all("tr"):
+        if not isinstance(tr, bs4.Tag) or tr.find_parent("table") is not actor_profile:
+            continue
+        key_cell = tr.find("th", attrs={"scope": "row"})
+        if not isinstance(key_cell, bs4.Tag):
+            continue
+        value_cell: bs4.Tag | None = None
+        for td in tr.find_all("td", recursive=False):
+            if not isinstance(td, bs4.Tag) or td.get("colspan"):
+                continue
+            value_cell = td
+            break
+        if value_cell is None:
+            continue
+        yield key_cell, value_cell
+
+
 def _process_personal_profile(
     actor_output: bs4.Tag, actor_info: EMbyActressInfo, overview: str, url: str, ja: bool, emby_on: list[EmbyAction]
 ) -> str:
@@ -396,32 +423,19 @@ def _process_personal_profile(
     if not actor_profile or not isinstance(actor_profile, bs4.Tag):
         return overview
 
-    att_keys = actor_profile.find_all(attrs={"scope": "row"})
-    att_values = actor_profile.find_all("td", style="", colspan=False)
-
-    if len(att_keys) != len(att_values):
+    pairs = list(_iter_infobox_pairs(actor_profile))
+    if not pairs:
         # 页面格式变化时降级：保留已提取内容，跳过表格解析（原 raise 导致整页失败、已提取内容也丢弃）
-        signal.show_log_text(f"⚠️ wiki 个人资料表格列数不匹配，跳过表格解析: {url}")
-        return overview
-
-    if not att_keys or not att_values:
+        signal.show_log_text(f"⚠️ wiki 个人资料表格未解析到键值行，跳过表格解析: {url}")
         return overview
 
     bday_element = actor_output.find(class_="bday")
     bday = f"({bday_element.get_text('', strip=True)})" if bday_element and isinstance(bday_element, bs4.Tag) else ""
 
     overview += "\n===== 个人资料 =====\n"
-    for i, each in enumerate(att_keys):
-        if not isinstance(each, bs4.Tag):
-            continue
-
-        info_left = each.get_text().strip()
-        info_right_element = att_values[i]
-
-        if not isinstance(info_right_element, bs4.Tag):
-            continue
-
-        info_right = info_right_element.get_text("", strip=True).replace(bday, "")
+    for key_cell, value_cell in pairs:
+        info_left = key_cell.get_text().strip()
+        info_right = value_cell.get_text("", strip=True).replace(bday, "")
         info = info_left + ": " + info_right
         overview += info + "\n"
 
@@ -453,15 +467,16 @@ def _process_location_info(
     info_left: str, info_right: str, actor_info: EMbyActressInfo, ja: bool, emby_on: list[EmbyAction]
 ) -> None:
     """处理出身地信息"""
-    if "出身地" not in info_left and "出道地点" not in info_left:
+    if "出身地" not in info_left and "出生地" not in info_left and "出道地点" not in info_left:
         return
 
-    location = re.findall(r"[^ →]+", info_right)
+    # 议题 #176: 旧实现 re.findall(r"[^ →]+") 按空格切第一段，「日本 埼玉县」只取到
+    # 「日本」被当纯国名丢弃（丢 prefecture），「日本, 福島県」取到「日本,」带脏标点。
+    # 改为：箭头格式取起点，再剥离前导国名与紧随的分隔符，剩余整体作为地名。
+    location = info_right.split("→")[0].strip()
+    location = re.sub(r"^日本[\s・·,，、]*", "", location)
+    location = location.replace("日本・", "").replace("日本·", "").strip()
     if not location:
-        return
-
-    location = location[0]
-    if location == "日本":
         return
 
     if ja and EmbyAction.ACTOR_INFO_TRANSLATE in emby_on and EmbyAction.ACTOR_INFO_JA not in emby_on:
@@ -471,8 +486,7 @@ def _process_location_info(
         elif EmbyAction.ACTOR_INFO_ZH_TW in emby_on:
             location = zhconv.convert(location, "zh-hant")
 
-    location = "日本·" + location.replace("日本・", "").replace("日本·", "").replace("日本", "")
-    actor_info.locations = [f"{location}"]
+    actor_info.locations = [f"日本·{location}"]
 
 
 def _extract_section_content(
