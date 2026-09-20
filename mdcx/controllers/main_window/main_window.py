@@ -17,6 +17,7 @@ from PyQt6.QtWidgets import (
     QApplication,
     QFileDialog,
     QHBoxLayout,
+    QHeaderView,
     QInputDialog,
     QLineEdit,
     QMainWindow,
@@ -4373,6 +4374,21 @@ class MyMAinWindow(QMainWindow):
 
     # 检查 fc2ppvdb cookie
     # region 刮削缓存管理
+    def _apply_scrape_cache_header_modes(self) -> None:
+        """议题 #179: 失败列表列宽策略。
+
+        旧实现列宽固定 5×130=650（Interactive），表格宽随窗口伸缩而列不动——
+        窄窗（用户截图 1032 视口 641）出水平滚动条，宽窗/最大化右侧大片空白。
+        改为文件名/最后错误 Stretch 分摊视口剩余宽、其余三列按内容收缩，
+        列总宽恒等于视口宽，两种现象同时消除。
+        """
+        header = self.Ui.tableWidget_scrape_cache_failed.horizontalHeader()
+        header.setSectionResizeMode(0, QHeaderView.ResizeMode.Stretch)
+        header.setSectionResizeMode(1, QHeaderView.ResizeMode.ResizeToContents)
+        header.setSectionResizeMode(2, QHeaderView.ResizeMode.ResizeToContents)
+        header.setSectionResizeMode(3, QHeaderView.ResizeMode.Stretch)
+        header.setSectionResizeMode(4, QHeaderView.ResizeMode.ResizeToContents)
+
     def _open_scrape_cache(self) -> ScrapeStateCache | None:
         cache = ScrapeStateCache(resources.u("scrape_state.db"))
         if not cache.open():
@@ -4418,8 +4434,8 @@ class MyMAinWindow(QMainWindow):
                     time.strftime("%Y-%m-%d %H:%M:%S", time.localtime(f.scraped_at)) if f.scraped_at else ""
                 ),
             )
-        tw.resizeColumnsToContents()
-        tw.setColumnWidth(3, 260)
+        # 议题 #179: 原 resizeColumnsToContents()+setColumnWidth(3,260) 与列宽伸缩策略冲突
+        # （长文本会把列总宽撑出视口，实测 sum=1462 必出横向滚动条），列宽交给 header 模式管理。
 
     def pushButton_scrape_cache_export_clicked(self) -> None:
         path, _ = QFileDialog.getSaveFileName(self, "导出失败列表", "scrape_failed.csv", "CSV (*.csv)")

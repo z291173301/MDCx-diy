@@ -373,6 +373,8 @@ def Init_Singal(self: "MyMAinWindow"):
     self.Ui.pushButton_scrape_cache_export.clicked.connect(self.pushButton_scrape_cache_export_clicked)
     self.Ui.pushButton_scrape_cache_reset.clicked.connect(self.pushButton_scrape_cache_reset_clicked)
     self.Ui.pushButton_scrape_cache_clear.clicked.connect(self.pushButton_scrape_cache_clear_clicked)
+    # 议题 #179: 失败列表列宽随视口伸缩（Stretch+ResizeToContents 策略），杜绝窄窗横向滚动条/宽窗右侧空白
+    self._apply_scrape_cache_header_modes()
     self.Ui.pushButton_actor_db_verify_tmdbid.clicked.connect(self.pushButton_actor_db_verify_tmdbid_clicked)
     self.Ui.pushButton_actor_db_check.clicked.connect(self.pushButton_actor_db_check_clicked)
     self.Ui.pushButton_actor_db_pick_nfo_dir.clicked.connect(self.pushButton_actor_db_pick_nfo_dir_clicked)
