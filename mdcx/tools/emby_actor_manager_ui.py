@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import concurrent.futures
+import re
 import threading
 from pathlib import Path
 
@@ -1949,9 +1950,11 @@ class ActorDetailDialog(QDialog):
         left_layout.addWidget(self.existing_avatar_label)
         self.existing_info = QTextEdit()
         self.existing_info.setReadOnly(True)
+        # 议题 #180: Emby 简介以 <br> 分行(服务器端渲染需要, 数据本身正确),
+        # MDCx 详情展示把 <br> 还原为换行——仅此处替换, 不回写数据。
         self.existing_info.setPlainText(
             "简介: "
-            + (actor.existing_overview or "无")
+            + re.sub(r"<br\s*/?>", "\n", actor.existing_overview or "无", flags=re.IGNORECASE)
             + "\n生日: "
             + (actor.existing_premiere_date[:10] if actor.existing_premiere_date else "无")
             + "\n出生地: "
