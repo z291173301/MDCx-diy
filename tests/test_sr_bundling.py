@@ -106,7 +106,7 @@ def test_build_args_include_sr_tools_only_for_windows_and_linux(tmp_path, monkey
 
     for system, expected in (("Windows", True), ("Linux", True), ("Darwin", False)):
         monkeypatch.setattr(build_mod.platform, "system", lambda s=system: s)
-        manager = build_mod.BuildManager("MDCx", "20260920", create_dmg=False, debug=True)
+        manager = build_mod.BuildManager("MDCx", "20260921", create_dmg=False, debug=True)
         args = manager._sr_tools_binary_args()
         marker = f"{os.pathsep}sr_tools/"
         assert any(marker in item for item in args) is expected, f"{system}: {args}"
