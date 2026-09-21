@@ -5,7 +5,15 @@ from typing import TYPE_CHECKING
 
 from PyQt6.QtCore import QSize, Qt
 from PyQt6.QtGui import QAction, QColor, QIcon, QPainter, QPixmap
-from PyQt6.QtWidgets import QAbstractItemView, QComboBox, QListView, QMenu, QSystemTrayIcon, QTreeWidgetItem
+from PyQt6.QtWidgets import (
+    QAbstractItemView,
+    QApplication,
+    QComboBox,
+    QListView,
+    QMenu,
+    QSystemTrayIcon,
+    QTreeWidgetItem,
+)
 
 from mdcx.config.extend import get_movie_path_setting
 from mdcx.config.resources import resources
@@ -114,13 +122,37 @@ def refresh_network_check_badges(self: "MyMAinWindow") -> None:
             combo.setItemData(i, _site_combo_item_tooltip(value, base), Qt.ItemDataRole.ToolTipRole)
 
 
+def _adaptive_window_sizes(avail_w: int, avail_h: int) -> tuple[int, int, int, int]:
+    """按屏幕可用区域计算窗口最小尺寸与默认尺寸，返回 (min_w, min_h, def_w, def_h)。
+
+    - 最小高取 min(650, 可用高×0.75)：650 可完整容纳主页面内容（设计底约 y=696，
+      主页面无滚动区，低于此值底部字段不可达）；×0.75 保证 125% 缩放
+      （1920x1080 → 逻辑 1536x864）下仍可缩小到 648，不回到锁死 700 的老问题。
+    - 最小宽 min(850, 可用宽×0.6)：850 为历史值（92ef2437），小屏按比例收窄。
+    - 默认尺寸 min(1089, 可用宽×0.9) × min(700, 可用高×0.85)：设计值不变，
+      小屏/高缩放首启不被占满。
+    """
+    min_w = min(850, max(int(avail_w * 0.6), 400))
+    min_h = min(650, max(int(avail_h * 0.75), 300))
+    def_w = min(1089, max(int(avail_w * 0.9), min_w))
+    def_h = min(700, max(int(avail_h * 0.85), min_h))
+    return min_w, min_h, def_w, def_h
+
+
 def Init_Ui(self: "MyMAinWindow"):
     self.setWindowTitle("MDCx")  # 设置任务栏标题
     self.setWindowIcon(QIcon(resources.icon_ico))  # 设置任务栏图标
     self.setWindowOpacity(1.0)  # 设置窗口透明度
-    if IS_WINDOWS:
-        self.setMinimumSize(QSize(850, 550))
+    screen = QApplication.primaryScreen()
+    if screen is not None:
+        avail = screen.availableGeometry()
+        min_w, min_h, def_w, def_h = _adaptive_window_sizes(avail.width(), avail.height())
     else:
+        min_w, min_h, def_w, def_h = 850, 550, 1089, 700
+    # 全平台设最小尺寸（原先仅 Windows）；默认尺寸按屏幕自适应
+    self.setMinimumSize(QSize(min_w, min_h))
+    self.resize(def_w, def_h)
+    if not IS_WINDOWS:
         self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground)
     self.Ui.progressBar_scrape.setValue(0)  # 进度条清0
     self.Ui.progressBar_scrape.setTextVisible(False)  # 不显示进度条文字

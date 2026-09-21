@@ -105,6 +105,7 @@
   - **重影/重叠先问「渲染层还是定义层」**（#123）：定义层同 cell 多控件几何检测抓不到（`itemAtPosition` 只返回最后一个、包围盒假绿），须 .ui 文本级哨兵（插行后 grep 该 grid 全部 `<item row=` 确认严格递增）；实机截图是最终判据，与 offscreen 矛盾时以实机为准。抬高某行后同滚动内容兄弟 groupBox 与滚动容器高度按设计 y 顺序整体下移。
   - **窗口状态汇聚点审计**（#79/#82/#132）：修窗口联动 bug 时 grep `setWindowState|activateWindow|showNormal|show|hide` 全库枚举汇聚点逐一加「可见且未最小化」守卫；配置保存/加载等业务函数不得顺手操控窗口状态；托盘隐藏后 eventFilter 不得自动 `show()`。
   - **PyQt6 测试纪律**：每个含 Qt 的测试文件顶部（PyQt6 导入前）自持 `os.environ.setdefault("QT_QPA_PLATFORM","offscreen")`；fixture 构造后立即停全部 QTimer；qFatal abort（栈无 Python 行号）查 QTimer 槽与 dummy 桩缺方法。Qt 同名 API 重载签名不同，改前确认目标类签名；测试桩显式枚举属性方法。隔离配置目录用 `monkeypatch.chdir(tmp_path)`，勿把 dummy 的 Path 属性改 str。
+  - **主窗最小尺寸是动态的（2026-09-21 起）**：`init.py::Init_Ui` 按 primaryScreen 可用区算（`_adaptive_window_sizes`，offscreen 虚拟屏 800x800 → min 480x600、启动 720x680）。写矮窗口几何回归测试前必须 `win.setMinimumSize(0, 0)` 解耦，否则 resize 被最小高顶起、场景失真；断言 label 裁切一律用 `win.height()` 而非目标 resize 值。
   - 主窗口全局绝对定位：长文本 QLabel 用 wordWrap 查 sizeHint；新增顶层控件纳入 resizeEvent 手动几何同步。QComboBox 装饰后缀：`addItem(icon, 文本, UserRole 纯值)`，消费点统一 `currentData()`，信号 handler 收文本须剥后缀。
 
 ## 站点与网络

@@ -10810,16 +10810,6 @@ class Ui_MDCx(object):
         self.label_110.setOpenExternalLinks(True)
         self.label_110.setObjectName("label_110")
         self.gridLayout_12.addWidget(self.label_110, 4, 1, 1, 1)
-        self.label_136 = QtWidgets.QLabel(parent=self.gridLayoutWidget)
-        sizePolicy = QtWidgets.QSizePolicy(QtWidgets.QSizePolicy.Policy.Minimum, QtWidgets.QSizePolicy.Policy.Fixed)
-        sizePolicy.setHorizontalStretch(0)
-        sizePolicy.setVerticalStretch(0)
-        sizePolicy.setHeightForWidth(self.label_136.sizePolicy().hasHeightForWidth())
-        self.label_136.setSizePolicy(sizePolicy)
-        self.label_136.setStyleSheet("color: rgb(8, 128, 128);")
-        self.label_136.setOpenExternalLinks(True)
-        self.label_136.setObjectName("label_136")
-        self.gridLayout_12.addWidget(self.label_136, 6, 1, 1, 1)
         self.gridLayout_12.setColumnStretch(0, 2)
         self.groupBox_14 = QtWidgets.QGroupBox(parent=self.scrollAreaWidgetContents_wangluo)
         self.groupBox_14.setGeometry(QtCore.QRect(30, 1327, 701, 230))
@@ -13975,12 +13965,6 @@ class Ui_MDCx(object):
         self.label_400.setText(_translate("MDCx", "自定义网址："))
         self.label_110.setText(
             _translate("MDCx", "<html><head/><body><p>自定义指定网站的网址，刮削时将用其代替默认网址</p></body></html>")
-        )
-        self.label_136.setText(
-            _translate(
-                "MDCx",
-                "<html><head/><body><p>必须安装 Chrome 浏览器。可处理某些无法获取的网站，内存占用会显著提高</p></body></html>",
-            )
         )
         self.groupBox_14.setTitle(_translate("MDCx", "API Token"))
         self.label_355.setText(_translate("MDCx", "ThePornDB："))

@@ -610,9 +610,12 @@ class MyMAinWindow(QMainWindow):
         # 底部随窗口同步下移。label_show_version 设计 (0,489,210,201)：底部对齐的文本框
         # 需保持底边与 widget_setting 底边贴齐；label_local_number 设计 (0,680,21,21)。
         # 议题 #102：贴底预留 40px，避免状态区紧贴窗底"太靠下"，视觉上往上移一行。
+        # max(..., 489) 只是"不低于设计位置"的下限；窗口高度 < 730 时底边会超出窗口，
+        # 底对齐文字末行（配置文件名/版本号）被窗底裁掉——再用 min(..., height-h) 上限
+        # 保证 label 完整落在窗口内（窗口最小高 550，见 init.py setMinimumSize）。
         _STATUS_BOTTOM_PAD = 40
-        ui.label_show_version.move(0, max(height - 201 - _STATUS_BOTTOM_PAD, 489))
-        ui.label_local_number.move(0, max(height - 21 - _STATUS_BOTTOM_PAD, 680))
+        ui.label_show_version.move(0, min(max(height - 201 - _STATUS_BOTTOM_PAD, 489), height - 201))
+        ui.label_local_number.move(0, min(max(height - 21 - _STATUS_BOTTOM_PAD, 680), height - 21))
         ui.stackedWidget.setGeometry(210, 6, max(width - 210 - 2, 400), max(height - 8, 300))
         ui.progressBar_scrape.setGeometry(209, -1, max(width - 211, 100), 7)
         self._sync_page_layouts()  # 同步动态页面的内部尺寸

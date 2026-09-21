@@ -655,6 +655,8 @@ def test_nfo_lib_form_compact_and_no_clip_when_small(win, app):
     assert at_small["outline_h"] == 60 and at_small["tag_h"] == 60, "放得下时简介/标签应保持设计高"
 
     # 更矮的窗口：压缩简介/标签换取免滚动可见，且不得出现横向裁剪
+    # 该高度在生产最小高（动态 ≥450）之下，属表单压缩用例，与最小尺寸策略解耦
+    win.setMinimumSize(0, 0)
     win.resize(1032, 560)
     at_tiny = probe()
     assert at_tiny["clip"] <= 0, f"压缩后输入框右缘被裁剪: {at_tiny['clip']}px"
@@ -857,6 +859,57 @@ def test_left_status_badges_follow_window_bottom(win, app):
     assert win.Ui.label_local_number.y() == 1109, (
         f"label_local_number 未贴底预留 40px: y={win.Ui.label_local_number.y()}"
     )
+
+
+def test_left_status_badges_fully_visible_in_short_window(win, app):
+    """矮窗口（<730）下左侧状态区不得被窗底裁掉。
+
+    回归背景：贴底公式 max(height-241, 489) 的 489 下限只防"高于设计位置"，
+    窗口高 <730 时 label 底边=690 超出窗口高度，底对齐文字的末行
+    （config.json/MDCx 版本号）被父 widget 裁剪——用户反馈「config.json
+    以下信息被截断」。修复后：label 底边必须 ≤ 窗口高度（完整落在窗口内）。
+    公式守卫应在任意高度成立（含生产最小高之下），故先放开动态最小尺寸。
+    """
+    _goto(win, app, "page_main")
+    win.setMinimumSize(0, 0)
+    for h in (700, 680, 650, 550):
+        win.resize(1089, h)
+        win.show()
+        app.processEvents()
+        for label, label_h in (
+            (win.Ui.label_show_version, 201),
+            (win.Ui.label_local_number, 21),
+        ):
+            bottom = label.y() + label_h
+            assert bottom <= win.height(), f"窗口高 {h} 时 {label.objectName()} 底边 {bottom} 超出窗口，末行被裁"
+
+
+def test_adaptive_window_sizes_matrix():
+    """_adaptive_window_sizes 纯函数：常见屏幕档位的 (min_w, min_h, def_w, def_h)。"""
+    from mdcx.controllers.main_window.init import _adaptive_window_sizes
+
+    # 1080p 无缩放（可用 1920x1040）：回到设计值，主页面内容完整
+    assert _adaptive_window_sizes(1920, 1040) == (850, 650, 1089, 700)
+    # 1080p 125% 缩放（逻辑 1536x864）：92ef2437 的原始诉求——不锁死 700，仍可缩到 648
+    assert _adaptive_window_sizes(1536, 864) == (850, 648, 1089, 700)
+    # 小屏（1024x600 可用）：默认/最小均按比例收，首启不占满
+    assert _adaptive_window_sizes(1024, 600) == (614, 450, 921, 510)
+    # 超小屏下限钳制：不得低于 400x300
+    assert _adaptive_window_sizes(500, 350) == (400, 300, 450, 300)
+
+
+def test_main_window_applies_adaptive_sizes(win):
+    """集成：主窗按 primaryScreen 应用最小尺寸（全平台，不再仅 Windows）。"""
+    from PyQt6.QtWidgets import QApplication
+
+    from mdcx.controllers.main_window.init import _adaptive_window_sizes
+
+    screen = QApplication.primaryScreen()
+    assert screen is not None, "前置失败：offscreen 平台应有虚拟屏"
+    avail = screen.availableGeometry()
+    min_w, min_h, _, _ = _adaptive_window_sizes(avail.width(), avail.height())
+    assert win.minimumWidth() == min_w, f"最小宽未自适应: {win.minimumWidth()} != {min_w}"
+    assert win.minimumHeight() == min_h, f"最小高未自适应: {win.minimumHeight()} != {min_h}"
 
 
 # ============ 议题 #102：四项 UI 交互模拟验证 ============
