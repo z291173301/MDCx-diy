@@ -110,3 +110,36 @@ def test_build_args_include_sr_tools_only_for_windows_and_linux(tmp_path, monkey
         args = manager._sr_tools_binary_args()
         marker = f"{os.pathsep}sr_tools/"
         assert any(marker in item for item in args) is expected, f"{system}: {args}"
+
+
+def test_build_args_fail_closed_when_sr_tools_missing(tmp_path, monkeypatch):
+    """Windows/Linux 缺工具目录必须硬失败（v2.1.1 实证：静默跳过导致一体包未内嵌）。"""
+    monkeypatch.setattr(build_mod, "SR_TOOLS_DIR", str(tmp_path / "no_such_dir"))
+
+    for system in ("Windows", "Linux"):
+        monkeypatch.setattr(build_mod.platform, "system", lambda s=system: s)
+        manager = build_mod.BuildManager("MDCx", "20260921", create_dmg=False, debug=True)
+        with pytest.raises(build_mod.BuildError, match="超分工具目录"):
+            manager._sr_tools_binary_args()
+
+    # macOS 不内嵌，缺目录仍放行
+    monkeypatch.setattr(build_mod.platform, "system", lambda: "Darwin")
+    manager = build_mod.BuildManager("MDCx", "20260921", create_dmg=False, debug=True)
+    assert manager._sr_tools_binary_args() == []
+
+
+def test_cleanup_preserves_sr_tools(tmp_path, monkeypatch):
+    """`_cleanup` 整清 build/ 时必须保留 SR_TOOLS_DIR（v2.1.1 实证：工具被清掉后打包静默缺工具）。"""
+    monkeypatch.chdir(tmp_path)
+    keep = tmp_path / "build" / "sr_tools" / "realesrgan"
+    keep.mkdir(parents=True)
+    (keep / "realesrgan-ncnn-vulkan").write_text("binary")
+    stale = tmp_path / "build" / "MDCx"
+    stale.mkdir(parents=True)
+    (stale / "Analysis-00.toc").write_text("toc")
+
+    manager = build_mod.BuildManager("MDCx", "20260921", create_dmg=False, debug=True)
+    manager._cleanup()
+
+    assert keep.is_dir() and (keep / "realesrgan-ncnn-vulkan").is_file()
+    assert not stale.exists()

@@ -152,6 +152,7 @@ class BuildManager:
         """一体包（Windows/Linux）内嵌超分工具目录；macOS 不内嵌。
 
         目录内容由构建期 `scripts/fetch_sr_tools.py` 拉取（二进制不入库）。
+        Windows/Linux 缺目录直接 BuildError：静默降级会让发版产物与宣传口径不一致。
         macOS 不内嵌的原因：.app 里放未签名的第三方可执行二进制会触发 Gatekeeper
         拦截，且「先签名后打包」的顺序会变脆（公证基本走不通）。
         """
@@ -159,10 +160,9 @@ class BuildManager:
             return []
         root = Path(SR_TOOLS_DIR)
         if not root.is_dir():
-            logger.warning(
-                f"未找到超分工具目录 {SR_TOOLS_DIR}（打包前需先跑 scripts/fetch_sr_tools.py），本次产物不内嵌工具"
+            raise BuildError(
+                f"未找到超分工具目录 {SR_TOOLS_DIR}（打包前需先跑 scripts/fetch_sr_tools.py），一体包不允许静默缺工具"
             )
-            return []
         args: list[str] = []
         for item in sorted(path for path in root.iterdir() if path.is_dir()):
             args.extend(["--add-binary", f"{item}{os.pathsep}sr_tools/{item.name}"])
@@ -386,12 +386,24 @@ class BuildManager:
             logger.info(f"大小: {dmg_size >> 20:.1f} MB")
 
     def _cleanup(self):
-        """清理临时文件"""
+        """清理临时文件
+
+        保留构建期拉取的超分工具目录 `build/sr_tools`：它由 `scripts/fetch_sr_tools.py`
+        在本流程开始前生成，整删 build/ 会把工具一并清掉，导致一体包静默缺工具
+        （v2.1.1 首版实证：warning 只进日志，发版产物未内嵌）。
+        """
         logger.info("清理临时文件...")
-        # 清理build目录
+        # 清理build目录（保留 SR_TOOLS_DIR）
         build_dir = Path("build")
+        keep = Path(SR_TOOLS_DIR).resolve()
         if build_dir.exists():
-            shutil.rmtree(build_dir)
+            for item in build_dir.iterdir():
+                if item.resolve() == keep or keep in item.resolve().parents:
+                    continue
+                if item.is_dir():
+                    shutil.rmtree(item)
+                else:
+                    item.unlink()
             logger.debug(build_dir)
         # 清理.spec文件
         spec_files = list(Path(".").glob("*.spec"))
