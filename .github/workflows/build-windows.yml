@@ -24,6 +24,18 @@ jobs:
         shell: bash
         run: uv sync --locked --all-extras --dev
 
+      - name: Restore SR tools cache
+        uses: actions/cache@v4
+        with:
+          path: build/sr_tools
+          key: sr-tools-windows
+
+      - name: Fetch SR tools
+        shell: bash
+        env:
+          PYTHONIOENCODING: utf-8
+        run: uv run python -m scripts.fetch_sr_tools --platform windows
+
       - name: Build Windows EXE
         env:
           PYTHONIOENCODING: utf-8

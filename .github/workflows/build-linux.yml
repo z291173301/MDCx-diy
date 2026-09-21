@@ -33,6 +33,17 @@ jobs:
       - name: Install locked dependencies
         run: uv sync --locked --all-extras --dev
 
+      - name: Restore SR tools cache
+        uses: actions/cache@v4
+        with:
+          path: build/sr_tools
+          key: sr-tools-linux
+
+      - name: Fetch SR tools
+        env:
+          PYTHONIOENCODING: utf-8
+        run: uv run python -m scripts.fetch_sr_tools --platform linux
+
       - name: Build Linux executable
         env:
           PYTHONIOENCODING: utf-8

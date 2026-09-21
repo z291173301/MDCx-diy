@@ -143,3 +143,19 @@ def test_cleanup_preserves_sr_tools(tmp_path, monkeypatch):
 
     assert keep.is_dir() and (keep / "realesrgan-ncnn-vulkan").is_file()
     assert not stale.exists()
+
+
+def test_packaging_workflows_fetch_sr_tools_before_build():
+    """Windows/Linux 打包工作流必须先 fetch 再 build。
+
+    CI 冒烟实证：build.py 缺工具已硬失败，但 ci.yaml / 手动打包工作流漏了
+    `scripts.fetch_sr_tools`，Windows job 测试全绿后在冒烟步 BuildError。
+    """
+    root = Path(".github/workflows")
+    for name in ("ci.yaml", "release.yml", "build-windows.yml", "build-linux.yml"):
+        text = (root / name).read_text(encoding="utf-8")
+        fetch_idx = text.find("scripts.fetch_sr_tools")
+        build_idx = text.find("scripts/build.py")
+        assert fetch_idx >= 0, f"{name} 缺少 scripts.fetch_sr_tools"
+        assert build_idx >= 0, f"{name} 缺少 scripts/build.py"
+        assert fetch_idx < build_idx, f"{name} 必须先 fetch_sr_tools 再 build.py"

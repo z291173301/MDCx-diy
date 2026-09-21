@@ -165,6 +165,21 @@ jobs:
           PYTHONIOENCODING: utf-8
         run: uv run pytest tests/ --tb=short -m "not network"
 
+      # 一体包硬失败：Windows 冒烟必须先有 build/sr_tools，否则 build.py 直接 BuildError。
+      # 缓存由 update-sr-tools.yml 预热；命中时 fetch 幂等跳过，未命中则当场拉取。
+      - name: Restore SR tools cache
+        if: steps.changes.outputs.code_changed == 'true'
+        uses: actions/cache@v4
+        with:
+          path: build/sr_tools
+          key: sr-tools-windows
+
+      - name: Fetch SR tools
+        if: steps.changes.outputs.code_changed == 'true'
+        env:
+          PYTHONIOENCODING: utf-8
+        run: uv run python -m scripts.fetch_sr_tools --platform windows
+
       # 打包参数回归（hidden-import / add-binary / 图标）只在发版 tag 才暴露，
       # 这里做一次 PyInstaller 冒烟构建，把问题前置到 PR/主干。
       - name: Build smoke test (PyInstaller)
