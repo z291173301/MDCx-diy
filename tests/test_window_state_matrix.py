@@ -889,17 +889,21 @@ def test_adaptive_window_sizes_matrix():
     from mdcx.controllers.main_window.init import _adaptive_window_sizes
 
     # 1080p 无缩放（可用 1920x1040）：回到设计值，主页面内容完整
-    assert _adaptive_window_sizes(1920, 1040) == (850, 650, 1089, 700)
+    assert _adaptive_window_sizes(1920, 1040) == (850, 650, 1030, 700)
     # 1080p 125% 缩放（逻辑 1536x864）：92ef2437 的原始诉求——不锁死 700，仍可缩到 648
-    assert _adaptive_window_sizes(1536, 864) == (850, 648, 1089, 700)
+    assert _adaptive_window_sizes(1536, 864) == (850, 648, 1030, 700)
     # 小屏（1024x600 可用）：默认/最小均按比例收，首启不占满
     assert _adaptive_window_sizes(1024, 600) == (614, 450, 921, 510)
     # 超小屏下限钳制：不得低于 400x300
     assert _adaptive_window_sizes(500, 350) == (400, 300, 450, 300)
 
 
-def test_main_window_applies_adaptive_sizes(win):
-    """集成：主窗按 primaryScreen 应用最小尺寸（全平台，不再仅 Windows）。"""
+def test_main_window_applies_adaptive_sizes(win, app):
+    """集成：min 尺寸在构造时按屏应用；默认尺寸在首次 showEvent 按屏自适应。
+
+    默认尺寸只允许 showEvent 应用——Init_Ui 阶段 resize 会崩 Windows 测试收尾
+    （诊断 PR #185），此处同时锁定该时序：show 前不得已被自适应 resize 过。
+    """
     from PyQt6.QtWidgets import QApplication
 
     from mdcx.controllers.main_window.init import _adaptive_window_sizes
@@ -907,9 +911,14 @@ def test_main_window_applies_adaptive_sizes(win):
     screen = QApplication.primaryScreen()
     assert screen is not None, "前置失败：offscreen 平台应有虚拟屏"
     avail = screen.availableGeometry()
-    min_w, min_h, _, _ = _adaptive_window_sizes(avail.width(), avail.height())
+    min_w, min_h, def_w, def_h = _adaptive_window_sizes(avail.width(), avail.height())
     assert win.minimumWidth() == min_w, f"最小宽未自适应: {win.minimumWidth()} != {min_w}"
     assert win.minimumHeight() == min_h, f"最小高未自适应: {win.minimumHeight()} != {min_h}"
+    win.show()
+    app.processEvents()
+    assert (win.width(), win.height()) == (def_w, def_h), (
+        f"首次显示未按屏自适应: {win.width()}x{win.height()} != {def_w}x{def_h}"
+    )
 
 
 # ============ 议题 #102：四项 UI 交互模拟验证 ============

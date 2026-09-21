@@ -97,7 +97,7 @@ from mdcx.views.similar_window import SimilarDialog
 from ..cut_window import CutWindow
 from .handlers import show_netstatus
 from .health_check import run_startup_health_checks
-from .init import Init_QSystemTrayIcon, Init_Singal, Init_Ui, init_QTreeWidget
+from .init import Init_QSystemTrayIcon, Init_Singal, Init_Ui, _adaptive_window_sizes, init_QTreeWidget
 from .load_config import load_config
 from .save_config import save_config
 from .site_priority_dialog import apply_site_priority_theme
@@ -541,8 +541,23 @@ class MyMAinWindow(QMainWindow):
     def showEvent(self, a0):
         if not self._did_apply_initial_size:
             self._did_apply_initial_size = True
-            self.resize(1030, 700)  # 首次显示时应用默认窗口大小
+            self._apply_adaptive_default_size()  # 首次显示时按屏幕自适应默认窗口大小
         super().showEvent(a0)
+
+    def _apply_adaptive_default_size(self) -> None:
+        """默认尺寸自适应（历史固定 1030x700，现按所在屏可用区缩放）。
+
+        只能在首次 showEvent 应用：Init_Ui 阶段（窗口未展示）调用 resize 会让
+        Windows 上的 pytest 进程在全部用例通过后的收尾阶段崩溃退出
+        （main 4ae34a61 两次实证，诊断 PR #185 二分锁定）。
+        """
+        screen = self.screen()
+        if screen is not None:
+            avail = screen.availableGeometry()
+            _, _, def_w, def_h = _adaptive_window_sizes(avail.width(), avail.height())
+        else:
+            def_w, def_h = 1030, 700
+        self.resize(def_w, def_h)
 
     # 用于计算窗口各子页面初始设计尺寸，被 resizeEvent 用于按比例缩放
     _BASE_W = 1040
@@ -612,7 +627,7 @@ class MyMAinWindow(QMainWindow):
         # 议题 #102：贴底预留 40px，避免状态区紧贴窗底"太靠下"，视觉上往上移一行。
         # max(..., 489) 只是"不低于设计位置"的下限；窗口高度 < 730 时底边会超出窗口，
         # 底对齐文字末行（配置文件名/版本号）被窗底裁掉——再用 min(..., height-h) 上限
-        # 保证 label 完整落在窗口内（窗口最小高 550，见 init.py setMinimumSize）。
+        # 保证 label 完整落在窗口内（最小高按屏幕自适应后仍可能低于 730，见 init.py）。
         _STATUS_BOTTOM_PAD = 40
         ui.label_show_version.move(0, min(max(height - 201 - _STATUS_BOTTOM_PAD, 489), height - 201))
         ui.label_local_number.move(0, min(max(height - 21 - _STATUS_BOTTOM_PAD, 680), height - 21))
