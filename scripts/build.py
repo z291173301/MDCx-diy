@@ -166,6 +166,8 @@ class BuildManager:
         args: list[str] = []
         for item in sorted(path for path in root.iterdir() if path.is_dir()):
             args.extend(["--add-binary", f"{item}{os.pathsep}sr_tools/{item.name}"])
+        if not args:
+            raise BuildError(f"超分工具目录 {SR_TOOLS_DIR} 为空（无 realesrgan/waifu2x 子目录），一体包不允许静默漏打")
         return args
 
     def _generate_spec(self):

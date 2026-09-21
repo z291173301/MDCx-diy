@@ -128,6 +128,23 @@ def test_build_args_fail_closed_when_sr_tools_missing(tmp_path, monkeypatch):
     assert manager._sr_tools_binary_args() == []
 
 
+def test_build_args_fail_closed_when_sr_tools_empty(tmp_path, monkeypatch):
+    """Windows/Linux 目录存在但无工具子目录必须硬失败（空目录 --add-binary 为空会静默漏打）。"""
+    empty = tmp_path / "sr_tools"
+    empty.mkdir()
+    monkeypatch.setattr(build_mod, "SR_TOOLS_DIR", str(empty))
+
+    for system in ("Windows", "Linux"):
+        monkeypatch.setattr(build_mod.platform, "system", lambda s=system: s)
+        manager = build_mod.BuildManager("MDCx", "20260921", create_dmg=False, debug=True)
+        with pytest.raises(build_mod.BuildError, match="为空"):
+            manager._sr_tools_binary_args()
+
+    monkeypatch.setattr(build_mod.platform, "system", lambda: "Darwin")
+    manager = build_mod.BuildManager("MDCx", "20260921", create_dmg=False, debug=True)
+    assert manager._sr_tools_binary_args() == []
+
+
 def test_cleanup_preserves_sr_tools(tmp_path, monkeypatch):
     """`_cleanup` 整清 build/ 时必须保留 SR_TOOLS_DIR（v2.1.1 实证：工具被清掉后打包静默缺工具）。"""
     monkeypatch.chdir(tmp_path)

@@ -34,14 +34,26 @@ jobs:
           fi
           files=$(git diff --name-only "$BASE_SHA" "$GITHUB_SHA")
           code_changed=false
+          actor_db_changed=false
+          info_db_changed=false
           while IFS= read -r file; do
             [ -z "$file" ] && continue
             case "$file" in
+              resources/userdata/actor_database.xlsx|scripts/check_actor_db.py)
+                actor_db_changed=true
+                code_changed=true
+                ;;
+              resources/userdata/info_database.xlsx|scripts/check_info_db.py)
+                info_db_changed=true
+                code_changed=true
+                ;;
               *.md|*.mdx|.monkeycode/*|docs/*) ;;
-              *) code_changed=true; break ;;
+              *) code_changed=true ;;
             esac
           done <<< "$files"
           echo "code_changed=$code_changed" >> "$GITHUB_OUTPUT"
+          echo "actor_db_changed=$actor_db_changed" >> "$GITHUB_OUTPUT"
+          echo "info_db_changed=$info_db_changed" >> "$GITHUB_OUTPUT"
 
       - name: Run docs-only check
         if: steps.changes.outputs.code_changed != 'true'
@@ -89,20 +101,16 @@ jobs:
         run: uv run pytest tests/ --tb=short -m "not network"
 
       - name: Run check_actor_db
-        if: steps.changes.outputs.code_changed == 'true'
+        if: steps.changes.outputs.actor_db_changed == 'true'
         run: uv run python -m scripts.check_actor_db
 
       - name: Run check_info_db
-        if: steps.changes.outputs.code_changed == 'true'
+        if: steps.changes.outputs.info_db_changed == 'true'
         run: uv run python -m scripts.check_info_db
 
       - name: Run check_thread_safety
         if: steps.changes.outputs.code_changed == 'true'
         run: uv run python -m scripts.check_thread_safety
-
-      - name: Run check_ui_layout
-        if: steps.changes.outputs.code_changed == 'true'
-        run: uv run python -m scripts.check_ui_layout
 
   windows:
     name: Windows Compatibility and Build

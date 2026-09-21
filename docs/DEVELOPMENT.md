@@ -248,7 +248,7 @@ ASIN 数据库（Excel `amazon_asin_database.xlsx`），搜索到的 ASIN 与番
     及 `uv run ruff format mdcx/views/MDCx.py`，不要手工改 `MDCx.py`
 - **演员工具页按钮一致性测试**（`tests/test_actor_db_button_consistency.py`）：纯静态校验（无需 Qt 运行时），锁定 `_ACTOR_DB_IDLE_TEXT_MAP` ↔ `MDCx.ui` 中控件 ↔ `MyMainWindow` 顶层 `pyqtSignal(str)` 声明 ↔ `actor_db_finished` 信号契约四层一致。按钮改名、漏声明信号、map 漏收等漂移在 CI 即可捕获
 - **actor_db 并发信号契约**：`actor_db_finished = pyqtSignal(str)` 带 task_id；所有 `_run_actor_db_*` 走 `_run_actor_db_async(btn_attr, busy_text, log_prefix, coro_factory)` 通用模板，防重入依赖 `_actor_db_running` 集合，跨任务误恢复由 `reset_buttons_status` 与 `_on_actor_db_finished` 共同规避
-- **推送前自检**：修改代码后先运行 `uv run quick-check`（ruff format/check + mypy）；提交推送前运行 `uv run check --skip-hook-install`（ruff format/check + mypy + pytest + check_actor_db + check_info_db + check_thread_safety + check_ui_layout）。
+- **推送前自检**：修改代码后先运行 `uv run quick-check`（ruff format/check + mypy）；提交推送前运行 `uv run check --skip-hook-install`（ruff format/check + mypy + pytest + check_thread_safety；出厂演员库/信息库或其校验脚本有改动时才跑 `check_actor_db` / `check_info_db`）。`scripts/check_ui_layout.py` 只作手工诊断（warning 不阻断），结构约束由 `tests/test_ui_structure.py` 锁定。
 
 ## 代码规范
 
