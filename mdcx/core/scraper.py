@@ -789,7 +789,7 @@ class Scraper:
                 extrafanart_task.cancel()
             return False
 
-        # 议题 #26: 海报超分增强（开关默认关；失败静默保持原图，不影响刮削结果）
+        # 议题 #26: 海报超分增强（开关默认开；失败静默保持原图，不影响刮削结果）
         with contextlib.suppress(Exception):
             await maybe_upscale_poster(poster_final_path)
 

@@ -2,11 +2,11 @@
 
 实现选型（与 amane 一致）：调用 ncnn-vulkan 外部二进制而非打包 torch/ONNX——
 - Real-ESRGAN（xinntao v0.2.5.0）与 waifu2x（nihui 20250915）官方 GitHub Release
-  的三平台 zip，首次使用时按需下载到 userdata/sr/tools/，不随包分发；
+  的三平台 zip；Windows/Linux 打包版内置，macOS/源码首次使用时按需下载到 userdata/sr/tools/；
 - 模型目录随 zip 下发，二进制按自身所在目录解析模型（cwd 设为二进制目录）；
 - 全程失败静默降级原图：无 Vulkan 环境/下载失败/超时无输出都不影响刮削结果。
 
-触发策略：`poster_sr_enabled` 默认关；仅当海报最长边 < `poster_sr_max_dim`
+触发策略：`poster_sr_enabled` 默认开；仅当海报最长边 < `poster_sr_max_dim`
 （老图/下架图常见 147x200 形态）且开关开启时对落盘海报跑一次超分并原子替换。
 """
 

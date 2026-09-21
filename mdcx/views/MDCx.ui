@@ -9771,7 +9771,7 @@
                       <x>0</x>
                       <y>0</y>
                       <width>860</width>
-                      <height>1715</height>
+                      <height>1732</height>
                     </rect>
                   </property>
                   <widget class="QGroupBox" name="groupBox_24">
@@ -10409,7 +10409,7 @@
                     <property name="geometry">
                       <rect>
                         <x>30</x>
-                        <y>1449</y>
+                        <y>1466</y>
                         <width>701</width>
                         <height>211</height>
                       </rect>
@@ -10506,7 +10506,7 @@
                     <property name="geometry">
                       <rect>
                         <x>30</x>
-                        <y>1169</y>
+                        <y>1186</y>
                         <width>701</width>
                         <height>261</height>
                       </rect>
@@ -10644,7 +10644,7 @@
                         <x>30</x>
                         <y>670</y>
                         <width>701</width>
-                        <height>260</height>
+                        <height>277</height>
                       </rect>
                     </property>
                     <property name="minimumSize">
@@ -10831,7 +10831,7 @@
                           <x>60</x>
                           <y>205</y>
                           <width>621</width>
-                          <height>31</height>
+                          <height>48</height>
                         </rect>
                       </property>
                       <layout class="QHBoxLayout" name="horizontalLayout_sr">
@@ -10863,7 +10863,7 @@
                               <string notr="true">color: rgb(8, 128, 128);</string>
                             </property>
                             <property name="text">
-                              <string>落盘封面最长边低于阈值时 AI 超分放大补清，失败静默保持原图</string>
+                              <string>最长边低于 800px 时 AI 放大补清；Win/Linux 已内置，macOS/源码首次下载约 30-60MB；无 Vulkan 或失败保持原图</string>
                             </property>
                             <property name="wordWrap">
                               <bool>true</bool>
@@ -10877,7 +10877,7 @@
                     <property name="geometry">
                       <rect>
                         <x>30</x>
-                        <y>949</y>
+                        <y>966</y>
                         <width>701</width>
                         <height>201</height>
                       </rect>
