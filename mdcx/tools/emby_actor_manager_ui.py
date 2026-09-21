@@ -1585,11 +1585,11 @@ IMAGE_SOURCE_NAMES = {
     "gfriends": "Gfriends头像库",
     "graphis": "Graphis头像/背景",
     "minnano": "Minnano-av头像",
-    "local": "本地头像",
+    "local": "本地头像库",
 }
 INFO_SOURCE_NAMES = {
     "local": "本地演员库",
-    "wiki": "维基百科网站",
+    "wiki": "维基百科",
     "minnano": "Minnano-av信息",
     "database": "本地数据库",
 }
